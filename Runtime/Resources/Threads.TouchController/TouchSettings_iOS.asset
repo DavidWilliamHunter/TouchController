@@ -1,0 +1,73 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 22b8bd1b604448c7b547b1c1036775ff, type: 3}
+  m_Name: TouchSettings_iOS
+  m_EditorClassIdentifier:
+  data:
+    density:
+      referenceDpi: 163
+      fallbackDpi: 460
+    motion:
+      touchSlopDp: 10
+    tap:
+      doubleTapTimeoutMs: 300
+      doubleTapMinTimeMs: 40
+      doubleTapSlopDp: 100
+      multiFingerTapWindowMs: 150
+    longPress:
+      longPressTimeoutMs: 500
+    fling:
+      minFlingVelocityDps: 50
+      maxFlingVelocityDps: 8000
+      velocityWindowMs: 100
+      swipeAngleToleranceDeg: 30
+    pinch:
+      minScalingSpanDp: 170
+    rotate:
+      minRotationDeg: 5
+    edge:
+      edgeSlopDp: 12
+    policy:
+      useOsValues: 1
+  lineup:
+  - gesture: {fileID: 11400000, guid: 5c852bc2a19444aca5700d1b2b74cb6e, type: 2}
+    enabled: 1
+  - gesture: {fileID: 11400000, guid: dc06cbdfd5874972ab98e9004d0e0a7f, type: 2}
+    enabled: 1
+  - gesture: {fileID: 11400000, guid: 8351edbc3eac4163beb54e668015f7e4, type: 2}
+    enabled: 1
+  - gesture: {fileID: 11400000, guid: ff61af9afa284d168afabeb2cd9a18d3, type: 2}
+    enabled: 1
+  - gesture: {fileID: 11400000, guid: 4b37198c9eb64791bd3be5fefd34b971, type: 2}
+    enabled: 1
+  - gesture: {fileID: 11400000, guid: 8936dd18b15d47ac8713324d0c72141a, type: 2}
+    enabled: 1
+  - gesture: {fileID: 11400000, guid: 465b5f5ff4d047b39ddc79b1634ea4cb, type: 2}
+    enabled: 1
+  - gesture: {fileID: 11400000, guid: 497000cf50db41a8ae4ab4fb0d9f5077, type: 2}
+    enabled: 1
+  - gesture: {fileID: 11400000, guid: 15b61fa78aed4d28bda5a3c7117478c2, type: 2}
+    enabled: 1
+  - gesture: {fileID: 11400000, guid: 4ee763f9f7e74dca82cc601f84bb429f, type: 2}
+    enabled: 1
+  - gesture: {fileID: 11400000, guid: 13d452403de9467681dcf9b459a5f904, type: 2}
+    enabled: 1
+  notes: "iOS defaults (unit: pt = 1/163 inch).\n\nSOURCE: UIKit UILongPressGestureRecognizer
+    defaults for touchSlopDp (allowableMovement 10 pt) and longPressTimeoutMs (minimumPressDuration
+    0.5 s).\n\nNO OS VALUES are read on iOS yet: UIKit does not expose its gesture
+    thresholds. Density comes from Screen.dpi, then fallbackDpi (no native plugin
+    for now).\n\nGUESSES - iOS does not publish these, so Android's values are used
+    as-is (1 pt is roughly 1 dp). Check on a real iPhone (plan.md Q2):\n- fallbackDpi
+    460: typical modern iPhone.\n- doubleTapTimeoutMs 300, doubleTapMinTimeMs 40, doubleTapSlopDp
+    100.\n- multiFingerTapWindowMs 150.\n- minFlingVelocityDps 50, maxFlingVelocityDps
+    8000, velocityWindowMs 100.\n- swipeAngleToleranceDeg 30, minRotationDeg 5.\n-
+    minScalingSpanDp 170, edgeSlopDp 12."
