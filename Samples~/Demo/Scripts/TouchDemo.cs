@@ -50,9 +50,17 @@ namespace Threads.TouchController.Demo
         private GUIStyle _small;
         private GUIStyle _toggle;
         private GUIStyle _button;
+        private GUIStyle _cell;
+        private GUIStyle _smallCentred;
         private float _stylesForPixelsPerDp;
         private Vector2 _panelScroll;
         private bool _panelHidden;
+
+        /// <summary>How many times each gesture has been recognised (Enter) since the last reset.</summary>
+        private readonly System.Collections.Generic.Dictionary<IGesture, int> _detected =
+            new System.Collections.Generic.Dictionary<IGesture, int>();
+
+        private const float DetectedColumnWidthDp = 72f;
 
         public DemoPlatform Platform => platform;
 
@@ -75,6 +83,14 @@ namespace Threads.TouchController.Demo
             _feed.Startup();
             _card = new DemoCard(_touch, IsOverPanel);
             _card.Startup(homeDp: () => FreeAreaCentreDp);
+            foreach (var gesture in _touch.Gestures)
+                gesture.Enter += OnGestureDetected;
+        }
+
+        private void OnGestureDetected(GestureEventData e)
+        {
+            _detected.TryGetValue(e.Gesture, out var count);
+            _detected[e.Gesture] = count + 1;
         }
 
         private void Update()
@@ -92,6 +108,9 @@ namespace Threads.TouchController.Demo
 
         private void OnDisable()
         {
+            foreach (var gesture in _touch.Gestures)
+                gesture.Enter -= OnGestureDetected;
+            _detected.Clear();
             _card.Shutdown();
             _feed.Shutdown();
             _touch.Shutdown();
@@ -283,8 +302,17 @@ namespace Threads.TouchController.Demo
             GUILayout.EndHorizontal();
 
             _panelScroll = GUILayout.BeginScrollView(_panelScroll);
+
+            // Column headings. "Detected" counts recognitions (Enter) and stays lit until Reset,
+            // because many gestures (tap, double tap, swipe) are only active for a moment.
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Gesture · live state", _small);
+            GUILayout.Label("Detected", _smallCentred, GUILayout.Width(Px(DetectedColumnWidthDp)));
+            GUILayout.EndHorizontal();
+
             foreach (var gesture in _touch.Gestures)
             {
+                GUILayout.BeginHorizontal();
                 var possible = 0;
                 var active = 0;
                 foreach (var instance in gesture.Instances)
@@ -297,12 +325,27 @@ namespace Threads.TouchController.Demo
                     : active > 0 ? new Color(0.4f, 1f, 0.4f)
                     : possible > 0 ? new Color(1f, 0.9f, 0.3f)
                     : Color.white;
-                var state = gesture.RunState == GestureRunState.Running ? $"possible {possible} · active {active}" : gesture.RunState.ToString();
+                var state = gesture.RunState != GestureRunState.Running ? gesture.RunState.ToString()
+                    : active > 0 ? $"active {active}"
+                    : possible > 0 ? $"possible {possible}"
+                    : "";
                 var enabled = GUILayout.Toggle(gesture.Enabled, $" {gesture.Name}   {state}", _toggle);
                 GUI.color = Color.white;
                 if (enabled != gesture.Enabled)
                     gesture.Enabled = enabled;
+
+                _detected.TryGetValue(gesture, out var detected);
+                var cell = GUILayoutUtility.GetRect(Px(DetectedColumnWidthDp), Px(ButtonHeightDp),
+                    GUILayout.Width(Px(DetectedColumnWidthDp)), GUILayout.Height(Px(ButtonHeightDp)));
+                GUI.color = detected > 0 ? new Color(0.25f, 0.75f, 0.3f, 0.85f) : new Color(1f, 1f, 1f, 0.08f);
+                GUI.DrawTexture(new Rect(cell.x, cell.y + Px(4), cell.width, cell.height - Px(8)), Texture2D.whiteTexture);
+                GUI.color = Color.white;
+                GUI.Label(cell, detected > 0 ? $"{detected}" : "-", _cell);
+                GUILayout.EndHorizontal();
             }
+
+            if (GUILayout.Button("Reset detected", _button))
+                _detected.Clear();
 
             GUILayout.Space(Px(10));
             GUILayout.BeginHorizontal();
@@ -336,6 +379,8 @@ namespace Threads.TouchController.Demo
             // Touch targets: at least 44 dp tall (Material 48 dp, Apple 44 pt, Microsoft 40 epx).
             _toggle = new GUIStyle(GUI.skin.toggle) { fontSize = Mathf.RoundToInt(Px(13)), fixedHeight = Px(ButtonHeightDp) };
             _button = new GUIStyle(GUI.skin.button) { fontSize = Mathf.RoundToInt(Px(13)), fixedHeight = Px(ButtonHeightDp) };
+            _smallCentred = new GUIStyle(_small) { alignment = TextAnchor.MiddleCenter, wordWrap = false };
+            _cell = new GUIStyle(GUI.skin.label) { fontSize = Mathf.RoundToInt(Px(13)), alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
         }
 
         private static Texture2D MakeCircle(int size, bool filled)

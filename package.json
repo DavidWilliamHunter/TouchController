@@ -1,6 +1,6 @@
 {
   "name": "com.threads.touchcontroller",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "displayName": "TouchController",
   "description": "Touch gesture recognition for Android, iOS and Windows touch (Surface) devices, built on the Unity Input System. Thresholds follow each platform's conventions in density-independent units and honour OS accessibility settings where they can be read.",
   "unity": "6000.3",

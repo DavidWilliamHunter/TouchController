@@ -2,6 +2,12 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] - 2026-11-11
+
+### Changed
+
+- Demo Scenes sample: the gesture panel has a **Detected** column that counts recognitions and stays lit until **Reset detected**. Short gestures such as taps and swipes no longer flash past unnoticed. The live state text is shorter so the column fits.
+
 ## [0.2.0] - 2026-11-11
 
 ### Added
