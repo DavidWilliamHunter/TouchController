@@ -1,6 +1,6 @@
 {
   "name": "com.threads.touchcontroller",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "displayName": "TouchController",
   "description": "Touch gesture recognition for Android, iOS and Windows touch (Surface) devices, built on the Unity Input System. Thresholds follow each platform's conventions in density-independent units and honour OS accessibility settings where they can be read.",
   "unity": "6000.3",
@@ -24,5 +24,17 @@
   ],
   "dependencies": {
     "com.unity.inputsystem": "1.20.0"
-  }
+  },
+  "samples": [
+    {
+      "displayName": "Demo Scenes",
+      "description": "Surface (Windows) and Android demo scenes: finger markers, gesture toggles, an event feed and a card that turns gestures into intentions. Rebuild them from Threads > TouchController.",
+      "path": "Samples~/Demo"
+    },
+    {
+      "displayName": "Default Settings",
+      "description": "Editable copies of the shipped TouchSettings for Android, iOS and Windows. Assign one to TouchSystemOptions.Settings to change thresholds or the gesture lineup.",
+      "path": "Samples~/DefaultSettings"
+    }
+  ]
 }

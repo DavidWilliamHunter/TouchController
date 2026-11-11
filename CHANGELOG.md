@@ -2,6 +2,14 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-11-11
+
+### Added
+
+- Samples, imported from the Package Manager's **Samples** tab:
+  - **Demo Scenes**: Surface (Windows) and Android demo scenes, with menu items to rebuild them.
+  - **Default Settings**: editable copies of the per-platform `TouchSettings` assets.
+
 ## [0.1.0] - 2026-11-11
 
 First preview release. Not yet tested on devices.

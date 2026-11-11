@@ -1,0 +1,79 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 22b8bd1b604448c7b547b1c1036775ff, type: 3}
+  m_Name: TouchSettings_Windows
+  m_EditorClassIdentifier:
+  data:
+    density:
+      referenceDpi: 96
+      fallbackDpi: 192
+    motion:
+      touchSlopDp: 8
+    tap:
+      doubleTapTimeoutMs: 500
+      doubleTapMinTimeMs: 40
+      doubleTapSlopDp: 100
+      multiFingerTapWindowMs: 150
+    longPress:
+      longPressTimeoutMs: 500
+    fling:
+      minFlingVelocityDps: 50
+      maxFlingVelocityDps: 8000
+      velocityWindowMs: 100
+      swipeAngleToleranceDeg: 30
+    pinch:
+      minScalingSpanDp: 170
+    rotate:
+      minRotationDeg: 5
+    edge:
+      edgeSlopDp: 12
+    policy:
+      useOsValues: 1
+  lineup:
+  - gesture: {fileID: 11400000, guid: 5c852bc2a19444aca5700d1b2b74cb6e, type: 2}
+    enabled: 1
+  - gesture: {fileID: 11400000, guid: dc06cbdfd5874972ab98e9004d0e0a7f, type: 2}
+    enabled: 1
+  - gesture: {fileID: 11400000, guid: c4e52823bff3439e90c4137a6088c8e2, type: 2}
+    enabled: 1
+  - gesture: {fileID: 11400000, guid: ff61af9afa284d168afabeb2cd9a18d3, type: 2}
+    enabled: 1
+  - gesture: {fileID: 11400000, guid: 4b37198c9eb64791bd3be5fefd34b971, type: 2}
+    enabled: 1
+  - gesture: {fileID: 11400000, guid: 8936dd18b15d47ac8713324d0c72141a, type: 2}
+    enabled: 1
+  - gesture: {fileID: 11400000, guid: 465b5f5ff4d047b39ddc79b1634ea4cb, type: 2}
+    enabled: 1
+  - gesture: {fileID: 11400000, guid: 497000cf50db41a8ae4ab4fb0d9f5077, type: 2}
+    enabled: 1
+  - gesture: {fileID: 11400000, guid: 15b61fa78aed4d28bda5a3c7117478c2, type: 2}
+    enabled: 1
+  - gesture: {fileID: 11400000, guid: 4ee763f9f7e74dca82cc601f84bb429f, type: 2}
+    enabled: 1
+  - gesture: {fileID: 11400000, guid: 13d452403de9467681dcf9b459a5f904, type: 2}
+    enabled: 1
+  notes: "WINDOWS touch / Microsoft Surface defaults (unit: effective pixel, 1/96
+    inch at 100% display scaling).\n\nMicrosoft publishes no touch thresholds in ms
+    or distances (only target sizes: 40x40 epx minimum). ALMOST EVERYTHING HERE IS
+    A GUESS - check on a Surface (plan.md Q2, Q9).\n\nREPLACED AT RUNTIME when policy.useOsValues
+    is on: doubleTapTimeoutMs (GetDoubleClickTime; this is the mouse setting, the
+    separate touch double-tap speed is not read yet). Density comes from GetDpiForWindow
+    (display scaling x 96).\n\nNOT READ YET (Q9): the touch accessibility settings
+    under HKCU\\Software\\Microsoft\\Wisp\\Touch (press-and-hold time, touch double-tap
+    speed, spatial tolerance) - value names and units need checking.\n\nGUESSES:\n-
+    fallbackDpi 192: 200% scaling, typical for a Surface.\n- doubleTapTimeoutMs 500:
+    Windows' default double-click time.\n- touchSlopDp 8, longPressTimeoutMs 500.\n-
+    doubleTapMinTimeMs 40, doubleTapSlopDp 100, multiFingerTapWindowMs 150.\n- minFlingVelocityDps
+    50, maxFlingVelocityDps 8000, velocityWindowMs 100.\n- swipeAngleToleranceDeg 30,
+    minRotationDeg 5, minScalingSpanDp 170, edgeSlopDp 12.\n\nQ11 (whether Windows
+    recognises a double tap on the 2nd finger down or up) belongs to the WindowsDoubleTap
+    gesture asset (phase 5); assumed: up."

@@ -23,13 +23,20 @@ In the Package Manager choose **+ → Install package from git URL…** and ente
 https://github.com/DavidWilliamHunter/TouchController.git
 ```
 
-To pin a version, add a tag, for example `https://github.com/DavidWilliamHunter/TouchController.git#v0.1.0`.
+To pin a version, add a tag, for example `https://github.com/DavidWilliamHunter/TouchController.git#v0.2.0`.
 
 You can also add it to `Packages/manifest.json` directly:
 
 ```json
-"com.threads.touchcontroller": "https://github.com/DavidWilliamHunter/TouchController.git#v0.1.0"
+"com.threads.touchcontroller": "https://github.com/DavidWilliamHunter/TouchController.git#v0.2.0"
 ```
+
+## Samples
+
+Import these from the Package Manager: select TouchController, open the **Samples** tab and choose **Import**.
+
+- **Demo Scenes**: `SurfaceDemo` and `AndroidDemo`. Each shows finger markers, lets you switch gestures on and off, lists gesture events as they happen, and has a card you can drag, pinch, rotate, fling, double-tap to reset and long-press to highlight. Add a scene to your build profile to try it on a device. *Threads → TouchController* rebuilds the scenes.
+- **Default Settings**: editable copies of the shipped `TouchSettings` for Android, iOS and Windows. The package's own copies (in `Runtime/Resources`) are read-only. Assign one to `TouchSystemOptions.Settings`, or to the demo's *Settings* field, to change thresholds or the gesture lineup.
 
 ## Quick start
 
@@ -73,6 +80,8 @@ To run the package's tests in your project, add it to `testables` in `Packages/m
 ```json
 "testables": [ "com.threads.touchcontroller" ]
 ```
+
+The serialisation tests also need `"com.unity.nuget.newtonsoft-json": "3.2.2"` in your dependencies. The package itself doesn't use Newtonsoft.
 
 ## Licence
 

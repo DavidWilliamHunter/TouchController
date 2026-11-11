@@ -1,0 +1,19 @@
+{
+    "name": "Threads.TouchController.Demo.Editor",
+    "rootNamespace": "Threads.TouchController.Demo",
+    "references": [
+        "Threads.TouchController",
+        "Threads.TouchController.Demo"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
