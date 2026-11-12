@@ -57,6 +57,7 @@ namespace Threads.TouchController
         private readonly TouchSystemOptions _options;
         private readonly List<GestureBase> _gestures = new List<GestureBase>();
         private readonly List<GestureBase> _pendingDestroy = new List<GestureBase>();
+        private readonly Dictionary<GestureBase, GestureBase> _sourceAssets = new Dictionary<GestureBase, GestureBase>(); // runtime copy -> asset
         private GestureBase[] _gestureSnapshot = Array.Empty<GestureBase>();
         private ITouchHost _host;
         private ITouchInput _input;
@@ -188,6 +189,27 @@ namespace Threads.TouchController
         }
 
         /// <summary>
+        /// The running copy made from <paramref name="gestureAsset"/> (the first, if it was added more than
+        /// once). Also accepts a gesture that is already running in this system, and returns it.
+        /// Use it to find what to subscribe to when you hold a reference to a gesture asset.
+        /// </summary>
+        public bool TryGetRuntime(GestureBase gestureAsset, out IGesture runtime)
+        {
+            RequireRunning();
+            runtime = null;
+            if (gestureAsset == null) return false;
+            foreach (var candidate in _gestures)
+            {
+                if (candidate == gestureAsset || (_sourceAssets.TryGetValue(candidate, out var source) && source == gestureAsset))
+                {
+                    runtime = candidate;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
         /// Adds a gesture at runtime: makes a runtime copy of <paramref name="gestureAsset"/>, starts it,
         /// and adds it to the runtime settings' lineup. It runs from the next update.
         /// </summary>
@@ -211,6 +233,7 @@ namespace Threads.TouchController
             RequireRunning();
             if (!(gesture is GestureBase runtime) || !_gestures.Remove(runtime))
                 return false;
+            _sourceAssets.Remove(runtime);
 
             runtime.Enabled = false;
             Settings.LineupList.RemoveAll(entry => entry != null && entry.gesture == runtime);
@@ -252,6 +275,7 @@ namespace Threads.TouchController
             runtime.hideFlags = HideFlags.DontSave;
             runtime.Initialise(_gestureContext, enabled);
             _gestures.Add(runtime);
+            _sourceAssets[runtime] = asset;
             _gestureSnapshot = _gestures.ToArray();
             return runtime;
         }
@@ -274,6 +298,7 @@ namespace Threads.TouchController
                 foreach (var gesture in _pendingDestroy)
                     DestroyObject(gesture);
                 _gestures.Clear();
+                _sourceAssets.Clear();
                 _pendingDestroy.Clear();
                 _gestureSnapshot = Array.Empty<GestureBase>();
                 _gestureContext = null;

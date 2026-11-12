@@ -9,7 +9,7 @@ namespace Threads.TouchController.Tests
     /// <summary>
     /// Pinch, Rotate, TwoFingerPan and TwoFingerTap with Android thresholds: slop 8 dp, minimum pinch
     /// span 170 dp, rotation 5°, two-finger tap window 150 ms, long press 400 ms.
-    /// Span = mean distance of the fingers from their centroid (half the distance for two fingers).
+    /// Span = twice the mean distance of the fingers from their centroid, as Android (for two fingers: their distance apart).
     /// </summary>
     public class MultiFingerGestureTests
     {
@@ -26,20 +26,24 @@ namespace Threads.TouchController.Tests
         public void Pinch_Spread_EntersAndReportsScale()
         {
             using var h = new GestureHarness<PinchGesture>();
-            Two(h.Input, new Vector2(0, 400), new Vector2(400, 400)); // span 200
+            Two(h.Input, new Vector2(0, 400), new Vector2(400, 400)); // span 400
             Assert.AreEqual(2, h.Log.Events[0].FingerCount);
 
-            h.Input.Move(2, new Vector2(450, 400)); // span 225: changed 25 > 16
+            h.Input.Move(2, new Vector2(410, 400)); // span 410: changed 10, not more than 2 × slop (16)
+            h.Input.Step();
+            Assert.AreEqual(1, h.Log.Events.Count, "Still Possible");
+
+            h.Input.Move(2, new Vector2(420, 400)); // span 420: changed 20 > 16
             h.Input.Step();
             var enter = h.Log.Events[1];
             Assert.AreEqual(GestureEventType.Enter, enter.Type);
-            Assert.AreEqual(1.125f, enter.Scale, 1e-4f);
+            Assert.AreEqual(1.05f, enter.Scale, 1e-4f);
 
-            h.Input.Move(2, new Vector2(500, 400)); // span 250
+            h.Input.Move(2, new Vector2(500, 400)); // span 500
             h.Input.Step();
             var stay = h.Log.Events[2];
             Assert.AreEqual(1.25f, stay.Scale, 1e-4f);
-            Assert.AreEqual(1.25f / 1.125f, stay.ScaleDelta, 1e-4f);
+            Assert.AreEqual(1.25f / 1.05f, stay.ScaleDelta, 1e-4f);
 
             h.Input.Up(2);
             h.Input.Step();
@@ -51,8 +55,8 @@ namespace Threads.TouchController.Tests
         public void Pinch_BelowMinimumSpan_NeverEnters()
         {
             using var h = new GestureHarness<PinchGesture>();
-            Two(h.Input, new Vector2(150, 400), new Vector2(250, 400)); // span 50
-            h.Input.Move(2, new Vector2(300, 400));                       // span 75
+            Two(h.Input, new Vector2(150, 400), new Vector2(250, 400)); // span 100
+            h.Input.Move(2, new Vector2(300, 400));                       // span 150: changed 50, but below 170
             h.Input.Step();
             h.Input.Up(2);
             h.Input.Step();
@@ -75,9 +79,41 @@ namespace Threads.TouchController.Tests
             Two(h.Input, new Vector2(0, 400), new Vector2(400, 400));
             h.Input.Move(2, new Vector2(450, 400));
             h.Input.Step();
-            h.Input.Move(2, new Vector2(300, 400)); // span 150 < 170
+            h.Input.Move(2, new Vector2(150, 400)); // span 150 < 170 (as Android: the scale ends below the minimum span)
             h.Input.Step();
             CollectionAssert.AreEqual(new[] { "Possible", "Enter", "Exit(Completed)" }, Kinds(h.Log));
+        }
+
+        [Test]
+        public void Pinch_StartsAtAndroidsMinimumDistance()
+        {
+            // Device report: a pinch needed the fingers ~340 dp apart, because the span was half their distance.
+            using var h = new GestureHarness<PinchGesture>();
+            Two(h.Input, new Vector2(100, 400), new Vector2(280, 400)); // 180 dp apart: above the 170 dp minimum
+            h.Input.Move(2, new Vector2(300, 400));                     // 200 apart: changed 20 > 16
+            h.Input.Step();
+            CollectionAssert.AreEqual(new[] { "Possible", "Enter" }, Kinds(h.Log));
+        }
+
+        [Test]
+        public void Pinch_ZoomingOut_LastsUntilTheFingersAreClose()
+        {
+            // Device report: pinching in (zoom out) ended as soon as the fingers were closer than ~340 dp.
+            using var h = new GestureHarness<PinchGesture>();
+            Two(h.Input, new Vector2(0, 400), new Vector2(400, 400));
+            h.Input.Move(2, new Vector2(420, 400));
+            h.Input.Step();
+            for (var x = 400; x >= 180; x -= 20) // pinch in to 180 dp apart
+            {
+                h.Input.Move(2, new Vector2(x, 400));
+                h.Input.Step();
+            }
+            Assert.AreEqual(GestureEventType.Stay, h.Log.Events.Last().Type, "Still zooming out");
+            Assert.AreEqual(180f / 400f, h.Log.Events.Last().Scale, 1e-4f);
+
+            h.Input.Move(2, new Vector2(160, 400)); // 160 < 170: ends, as on Android
+            h.Input.Step();
+            Assert.AreEqual("Exit(Completed)", Kinds(h.Log).Last());
         }
 
         [Test]

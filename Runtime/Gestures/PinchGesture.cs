@@ -9,7 +9,7 @@ namespace Threads.TouchController
         /// <summary>The span that corresponds to <see cref="GestureInstance.Scale"/> = 1 (dp).</summary>
         public float StartSpanDp { get; internal set; }
 
-        /// <summary>The current span: mean distance of the fingers from their centroid (dp).</summary>
+        /// <summary>The current span (dp): twice the mean distance of the fingers from their centroid; with two fingers, their distance apart.</summary>
         public float SpanDp { get; internal set; }
     }
 
@@ -21,8 +21,9 @@ namespace Threads.TouchController
     /// when fewer than two fingers remain or the span drops below the minimum. Can be active together with
     /// Rotate and TwoFingerPan.
     /// </summary>
-    /// <remarks>Span = mean distance of the fingers from their centroid. With two fingers it is half their distance.
-    /// When a finger joins or leaves, the scale continues from its current value (no jump).</remarks>
+    /// <remarks>Span = twice the mean distance of the fingers from their centroid, as Android's ScaleGestureDetector
+    /// (whose values <c>minScalingSpanDp</c> and the 2 × slop threshold come from). With two fingers it is their
+    /// distance apart. When a finger joins or leaves, the scale continues from its current value (no jump).</remarks>
     [CreateAssetMenu(fileName = "Pinch", menuName = "Threads/TouchController/Gestures/Pinch")]
     public sealed class PinchGesture : MultiFingerGesture<PinchInstance>
     {
@@ -77,7 +78,7 @@ namespace Threads.TouchController
                 sum += (touch.positionDp - centre).magnitude;
                 count++;
             }
-            return count > 0 ? sum / count : 0f;
+            return count > 0 ? 2f * sum / count : 0f; // a diameter, like Android's span (not a radius)
         }
     }
 }

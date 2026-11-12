@@ -23,12 +23,13 @@
     "mobile"
   ],
   "dependencies": {
-    "com.unity.inputsystem": "1.20.0"
+    "com.unity.inputsystem": "1.20.0",
+    "com.unity.ugui": "2.0.0"
   },
   "samples": [
     {
       "displayName": "Demo Scenes",
-      "description": "Surface (Windows) and Android demo scenes: finger markers, gesture toggles, an event feed and a card that turns gestures into intentions. Rebuild them from Threads > TouchController.",
+      "description": "Surface (Windows) and Android demo scenes: finger markers, gesture toggles, an event feed and a card that turns gestures into intentions. Plus an Intentions Frame Demo: a frame you can drag from anywhere, even from its buttons, while a tap on a button still presses it. Rebuild the scenes from Threads > TouchController.",
       "path": "Samples~/Demo"
     },
     {

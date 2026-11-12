@@ -402,7 +402,54 @@ namespace Threads.TouchController.Tests
             CollectionAssert.AreEqual(new[] { "Possible#1", "Enter#1", "Exit(Completed)#1" }, h.Log.WithoutStays());
         }
 
+        [Test]
+        public void HandlerException_DoesNotStopLaterHandlers()
+        {
+            using var h = new GestureHarness<TestHoldGesture>();
+            var later = 0;
+            Action<GestureEventData> thrower = _ => throw new Exception("boom");
+            h.Gesture.Enter += thrower;
+            h.Gesture.Enter += _ => later++;
+            h.Gesture.OnDisabled += _ => throw new Exception("disabled boom");
+            h.Gesture.OnDisabled += _ => later++;
+            h.Input.Down(1, A);
+            h.Input.Step();
+
+            LogAssert.Expect(LogType.Exception, new Regex("boom"));
+            h.Input.Hold(450);
+            Assert.AreEqual(1, later, "The handler after the throwing one still runs");
+
+            LogAssert.Expect(LogType.Exception, new Regex("disabled boom"));
+            h.Gesture.Enabled = false;
+            Assert.AreEqual(2, later);
+
+            h.Gesture.Enter -= thrower; // unsubscribing still works
+            h.Gesture.Enabled = true;
+            h.Input.Up(1);
+            h.Input.Step();
+            h.Input.Down(2, A);
+            h.Input.Step();
+            h.Input.Hold(450);
+            Assert.AreEqual(3, later);
+        }
+
         // ---- Enable / disable (rule 8) -------------------------------------------------------
+
+        [Test]
+        public void DisableFromAHandler_LaterHandlersGetOnlyOnDisabled()
+        {
+            using var h = new GestureHarness<TestHoldGesture>();
+            var later = new System.Collections.Generic.List<string>();
+            h.Gesture.Enter += _ => h.Gesture.Enabled = false;   // first handler disables
+            h.Gesture.Enter += e => later.Add("Enter");
+            h.Gesture.OnDisabled += _ => later.Add("OnDisabled");
+            h.Input.Down(1, A);
+            h.Input.Step();
+            h.Input.Hold(450);
+
+            CollectionAssert.AreEqual(new[] { "OnDisabled" }, later, "Never an Enter for an instance already discarded");
+        }
+
 
         [Test]
         public void Disable_WhileActive_OnlyOnDisabled_NoExit()

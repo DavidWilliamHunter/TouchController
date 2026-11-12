@@ -1,46 +1,46 @@
-using System.Collections.Generic;
+using Threads.TouchController.Intentions;
 using UnityEngine;
 
 namespace Threads.TouchController.Demo
 {
     /// <summary>
-    /// A card to play with: a small example of context code turning gestures into intentions.
-    /// Plain class with one start-up and one shut-down point; it is given the TouchSystem.
+    /// A card to play with, driven by intentions. Plain class with one start-up and one shut-down point; it
+    /// is given the IntentionSystem. Compare with the hand-written version in Usage.md §7: the per-finger
+    /// bookkeeping (what each finger touched, which gestures suppress which) is now declared.
     /// </summary>
     /// <remarks>
-    /// Intentions (all decided here, not in the package):
+    /// Intentions (all limited to fingers that touched down on the card, not on the UI panel):
     /// <list type="bullet">
-    /// <item>Drag a finger that started on the card: move it (unless a two-finger gesture is active).</item>
-    /// <item>Two-finger pan / pinch / rotate with a finger on the card: move / scale / rotate it.</item>
-    /// <item>Swipe that started on the card: fling it.</item>
-    /// <item>Double tap on the card: reset it.</item>
-    /// <item>Long press on the card: toggle its highlight.</item>
-    /// <item>Fingers that start on the UI panel are ignored ("blocking is the context code's job").</item>
+    /// <item><b>Drag</b> (one finger): move the card.</item>
+    /// <item><b>Manipulate</b> (two-finger pan, pinch and rotate, together): move, scale and turn it. Priority 20
+    /// and exclusive: it takes the fingers from the one-finger drag. One intention bound to all three gestures,
+    /// so they don't compete with each other.</item>
+    /// <item><b>Fling</b> (swipe): set the card gliding.</item>
+    /// <item><b>Reset</b> (double tap): put it back.</item>
+    /// <item><b>Highlight</b> (long press): toggle its highlight.</item>
+    /// <item><b>Touching</b> (press): no action; while any finger that touched the card is down, the card doesn't glide.
+    /// Shared, with the highest priority, so nothing takes it away.</item>
     /// </list>
     /// </remarks>
     public sealed class DemoCard
     {
-        private enum Target { Background, Card, Ui }
-
-        private readonly TouchSystem _touch;
+        private readonly IntentionSystem _intentions;
         private readonly System.Func<Vector2, bool> _isOverUi;
-        private readonly Dictionary<int, Target> _fingers = new Dictionary<int, Target>();
 
-        private PressGesture _press;
-        private DragGesture _drag;
-        private TwoFingerPanGesture _pan;
-        private PinchGesture _pinch;
-        private RotateGesture _rotate;
-        private SwipeGesture _swipe;
-        private DoubleTapGesture _doubleTap;
-        private LongPressGesture _longPress;
+        private Intention _drag;
+        private Intention _manipulate;
+        private Intention _fling;
+        private Intention _reset;
+        private Intention _highlight;
+        private Intention _touching;
         private Vector2 _velocityDps;
+        private System.Func<Vector2> _homeDp;
 
-        /// <param name="touch">The running touch system.</param>
+        /// <param name="intentions">The running intention system.</param>
         /// <param name="isOverUi">Whether a position (dp, origin bottom-left) is over the demo's UI.</param>
-        public DemoCard(TouchSystem touch, System.Func<Vector2, bool> isOverUi)
+        public DemoCard(IntentionSystem intentions, System.Func<Vector2, bool> isOverUi)
         {
-            _touch = touch;
+            _intentions = intentions;
             _isOverUi = isOverUi;
         }
 
@@ -53,93 +53,54 @@ namespace Threads.TouchController.Demo
 
         public bool Highlighted { get; private set; }
 
-        /// <summary>A finger that started on the card is still down.</summary>
-        public bool Held
-        {
-            get
-            {
-                foreach (var target in _fingers.Values)
-                    if (target == Target.Card) return true;
-                return false;
-            }
-        }
+        /// <summary>A finger that touched down on the card is still down.</summary>
+        public bool Held => _touching != null && _touching.IsActive;
 
-        private System.Func<Vector2> _homeDp;
-
-        /// <summary>Call after the TouchSystem has started. <paramref name="homeDp"/> gives the reset position (it can change, e.g. on rotation).</summary>
+        /// <summary>Call after the IntentionSystem has started. <paramref name="homeDp"/> gives the reset position (it can change, e.g. on rotation).</summary>
         public void Startup(System.Func<Vector2> homeDp)
         {
             _homeDp = homeDp;
             Reset();
 
-            if (_touch.TryGet(out _press))
-            {
-                _press.Possible += OnFingerDown;
-                _press.Exit += OnFingerUp;
-                _press.OnDisabled += OnPressDisabled;
-            }
-            if (_touch.TryGet(out _drag))
-            {
-                _drag.Enter += OnDrag;
-                _drag.Stay += OnDrag;
-            }
-            if (_touch.TryGet(out _pan))
-            {
-                _pan.Enter += OnPan;
-                _pan.Stay += OnPan;
-            }
-            if (_touch.TryGet(out _pinch))
-            {
-                _pinch.Enter += OnPinch;
-                _pinch.Stay += OnPinch;
-            }
-            if (_touch.TryGet(out _rotate))
-            {
-                _rotate.Enter += OnRotate;
-                _rotate.Stay += OnRotate;
-            }
-            if (_touch.TryGet(out _swipe))
-                _swipe.Enter += OnSwipe;
-            if (_touch.TryGet(out _doubleTap))
-                _doubleTap.Enter += OnDoubleTap;
-            if (_touch.TryGet(out _longPress))
-                _longPress.Enter += OnLongPress;
+            // Checked once per finger, where it touched down (the card moves, the decision doesn't).
+            var onCard = Area.From(p => !_isOverUi(p.PositionDp) && Contains(p.PositionDp));
+
+            _drag = new Intention("Card drag", _intentions).Bind<DragGesture>().InArea(onCard);
+            _drag.Performed += OnDrag;
+
+            _manipulate = new Intention("Card manipulate", _intentions)
+                .Bind<TwoFingerPanGesture>().Bind<PinchGesture>().Bind<RotateGesture>()
+                .InArea(onCard).WithPriority(20).Exclusive();
+            _manipulate.Performed += OnManipulate;
+
+            _fling = new Intention("Card fling", _intentions).Bind<SwipeGesture>().InArea(onCard);
+            _fling.Performed += OnFling;
+
+            _reset = new Intention("Card reset", _intentions).Bind<DoubleTapGesture>().InArea(onCard);
+            _reset.Started += OnReset;
+
+            _highlight = new Intention("Card highlight", _intentions).Bind<LongPressGesture>().InArea(onCard);
+            _highlight.Started += OnHighlight;
+
+            _touching = new Intention("Card touched", _intentions).Bind<PressGesture>().InArea(onCard).WithPriority(100);
+
+            foreach (var intention in All) intention.Enabled = true;
         }
 
-        /// <summary>Call before the TouchSystem shuts down.</summary>
+        /// <summary>Call before the IntentionSystem shuts down.</summary>
         public void Shutdown()
         {
-            if (_press != null)
-            {
-                _press.Possible -= OnFingerDown;
-                _press.Exit -= OnFingerUp;
-                _press.OnDisabled -= OnPressDisabled;
-            }
-            if (_drag != null)
-            {
-                _drag.Enter -= OnDrag;
-                _drag.Stay -= OnDrag;
-            }
-            if (_pan != null)
-            {
-                _pan.Enter -= OnPan;
-                _pan.Stay -= OnPan;
-            }
-            if (_pinch != null)
-            {
-                _pinch.Enter -= OnPinch;
-                _pinch.Stay -= OnPinch;
-            }
-            if (_rotate != null)
-            {
-                _rotate.Enter -= OnRotate;
-                _rotate.Stay -= OnRotate;
-            }
-            if (_swipe != null) _swipe.Enter -= OnSwipe;
-            if (_doubleTap != null) _doubleTap.Enter -= OnDoubleTap;
-            if (_longPress != null) _longPress.Enter -= OnLongPress;
-            _fingers.Clear();
+            if (_drag == null) return;
+            foreach (var intention in All) intention.Enabled = false;
+            _drag.Performed -= OnDrag;
+            _manipulate.Performed -= OnManipulate;
+            _fling.Performed -= OnFling;
+            _reset.Started -= OnReset;
+            _highlight.Started -= OnHighlight;
+            _drag = _manipulate = _fling = _reset = _highlight = _touching = null;
         }
+
+        private Intention[] All => new[] { _drag, _manipulate, _fling, _reset, _highlight, _touching };
 
         /// <summary>Glide after a fling, staying on screen.</summary>
         public void Tick(float deltaSeconds, Vector2 screenSizeDp)
@@ -176,63 +137,35 @@ namespace Threads.TouchController.Demo
             _velocityDps = Vector2.zero;
         }
 
-        // ---- Intentions ------------------------------------------------------------------------
+        // ---- Actions: what each intention does to the card ---------------------------------------------
 
-        private void OnFingerDown(GestureEventData e) =>
-            _fingers[e.FingerId] = _isOverUi(e.PositionDp) ? Target.Ui : Contains(e.PositionDp) ? Target.Card : Target.Background;
-
-        private void OnFingerUp(GestureEventData e) => _fingers.Remove(e.FingerId);
-
-        private void OnPressDisabled(IGesture gesture) => _fingers.Clear(); // no Exit will come
-
-        private bool OnCard(int fingerId) => _fingers.TryGetValue(fingerId, out var t) && t == Target.Card;
-
-        private bool AnyOnCard(IReadOnlyList<int> fingerIds)
+        private void OnDrag(IntentionEventData e)
         {
-            foreach (var id in fingerIds)
-                if (OnCard(id)) return true;
-            return false;
-        }
-
-        private bool TwoFingerGestureActive =>
-            (_pinch != null && _pinch.IsActive) || (_rotate != null && _rotate.IsActive) || (_pan != null && _pan.IsActive);
-
-        private void OnDrag(GestureEventData e)
-        {
-            if (!OnCard(e.FingerId) || TwoFingerGestureActive) return;
             CentreDp += e.DeltaDp;
             _velocityDps = Vector2.zero;
         }
 
-        private void OnPan(GestureEventData e)
+        private void OnManipulate(IntentionEventData e)
         {
-            if (AnyOnCard(e.FingerIds)) CentreDp += e.DeltaDp;
+            switch (e.Gesture)
+            {
+                case TwoFingerPanGesture _:
+                    CentreDp += e.DeltaDp;
+                    break;
+                case PinchGesture _:
+                    Scale = Mathf.Clamp(Scale * e.ScaleDelta, 0.3f, 5f);
+                    break;
+                case RotateGesture _:
+                    AngleDeg += e.AngleDeltaDeg;
+                    break;
+            }
         }
 
-        private void OnPinch(GestureEventData e)
-        {
-            if (AnyOnCard(e.FingerIds)) Scale = Mathf.Clamp(Scale * e.ScaleDelta, 0.3f, 5f);
-        }
+        private void OnFling(IntentionEventData e) => _velocityDps = e.VelocityDps;
 
-        private void OnRotate(GestureEventData e)
-        {
-            if (AnyOnCard(e.FingerIds)) AngleDeg += e.AngleDeltaDeg;
-        }
+        private void OnReset(IntentionEventData e) => Reset();
 
-        private void OnSwipe(GestureEventData e)
-        {
-            if (OnCard(e.FingerId)) _velocityDps = e.VelocityDps;
-        }
-
-        private void OnDoubleTap(GestureEventData e)
-        {
-            if (Contains(e.PositionDp)) Reset();
-        }
-
-        private void OnLongPress(GestureEventData e)
-        {
-            if (OnCard(e.FingerId)) Highlighted = !Highlighted;
-        }
+        private void OnHighlight(IntentionEventData e) => Highlighted = !Highlighted;
 
         private static Vector2 Rotate(Vector2 v, float degrees)
         {

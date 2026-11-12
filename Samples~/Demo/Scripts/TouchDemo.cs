@@ -41,6 +41,7 @@ namespace Threads.TouchController.Demo
         [SerializeField] private bool simulateTouchInEditor = true;
 
         private TouchSystem _touch;
+        private Intentions.IntentionSystem _intentions;
         private GestureEventFeed _feed;
         private DemoCard _card;
 
@@ -72,6 +73,7 @@ namespace Threads.TouchController.Demo
                 Platform = ToTouchPlatform(platform),
                 SimulateTouchInEditor = simulateTouchInEditor,
             });
+            _intentions = new Intentions.IntentionSystem(_touch);
             _disc = MakeCircle(128, filled: true);
             _ring = MakeCircle(128, filled: false);
         }
@@ -79,9 +81,10 @@ namespace Threads.TouchController.Demo
         private void OnEnable()
         {
             _touch.Startup();
+            _intentions.Startup();
             _feed = new GestureEventFeed(_touch, capacity: 18);
             _feed.Startup();
-            _card = new DemoCard(_touch, IsOverPanel);
+            _card = new DemoCard(_intentions, IsOverPanel);
             _card.Startup(homeDp: () => FreeAreaCentreDp);
             foreach (var gesture in _touch.Gestures)
                 gesture.Enter += OnGestureDetected;
@@ -96,6 +99,7 @@ namespace Threads.TouchController.Demo
         private void Update()
         {
             _touch.Update();
+            _intentions.Update(); // straight after the touch system
             _card.Tick(Time.deltaTime, ScreenDp);
         }
 
@@ -113,11 +117,13 @@ namespace Threads.TouchController.Demo
             _detected.Clear();
             _card.Shutdown();
             _feed.Shutdown();
+            _intentions.Shutdown();
             _touch.Shutdown();
         }
 
         private void OnDestroy()
         {
+            _intentions?.Dispose();
             _touch?.Dispose();
             Destroy(_disc);
             Destroy(_ring);

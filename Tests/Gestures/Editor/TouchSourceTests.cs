@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -109,6 +110,89 @@ namespace Threads.TouchController.Tests
             Capture();
             CancelTouch(1, new Vector2(100, 200));
             Assert.AreEqual(TouchPointPhase.Canceled, Only(Capture()).phase);
+        }
+
+        // ---- Several Input System updates between captures ------------------------------------------------
+        // EnhancedTouch reports Began / Moved / Ended only in the update in which they happen. When the Input
+        // System updates more than once per frame, TouchSource must still report them.
+
+        [Test]
+        public void MissedBegan_FirstSightIsBegan()
+        {
+            BeginTouch(1, new Vector2(100, 200));
+            InputSystem.Update(); // EnhancedTouch now says Stationary
+            var touch = Only(Capture());
+            Assert.AreEqual(TouchPointPhase.Began, touch.phase);
+            Assert.AreEqual(new Vector2(50, 100), touch.startPositionDp);
+        }
+
+        [Test]
+        public void MissedMoved_PositionChangeIsMoved()
+        {
+            BeginTouch(1, new Vector2(100, 200));
+            Capture();
+            MoveTouch(1, new Vector2(140, 200));
+            InputSystem.Update();
+            var touch = Only(Capture());
+            Assert.AreEqual(TouchPointPhase.Moved, touch.phase);
+            Assert.AreEqual(new Vector2(70, 100), touch.positionDp);
+        }
+
+        [Test]
+        public void MissedEnded_VanishedContactEnds()
+        {
+            BeginTouch(1, new Vector2(100, 200));
+            var id = Only(Capture()).touchId;
+            MoveTouch(1, new Vector2(140, 200));
+            EndTouch(1, new Vector2(140, 200));
+            InputSystem.Update(); // the touch is gone from activeTouches
+            var touch = Only(Capture());
+            Assert.AreEqual(TouchPointPhase.Ended, touch.phase);
+            Assert.AreEqual(id, touch.touchId);
+            Assert.AreEqual(0, Capture().Count);
+        }
+
+        [Test]
+        public void BeganAndEndedBetweenCaptures_BeganThenEndedNextFrame()
+        {
+            Capture();
+            BeginTouch(1, new Vector2(100, 200));
+            EndTouch(1, new Vector2(100, 200));
+            var began = Only(Capture());
+            Assert.AreEqual(TouchPointPhase.Began, began.phase, "Never begins and ends in one frame");
+            var ended = Only(Capture());
+            Assert.AreEqual(TouchPointPhase.Ended, ended.phase);
+            Assert.AreEqual(began.touchId, ended.touchId);
+            InputSystem.Update();
+            Assert.AreEqual(0, Capture().Count);
+        }
+
+        [Test]
+        public void TwoCapturesInOneInputUpdate_EndedContactIsNotRevived()
+        {
+            BeginTouch(1, new Vector2(100, 200));
+            Capture();
+            EndTouch(1, new Vector2(100, 200));
+            Assert.AreEqual(TouchPointPhase.Ended, Only(Capture()).phase);
+            Assert.AreEqual(0, Capture().Count, "Still listed as Ended by EnhancedTouch, but already reported");
+            Assert.AreEqual(0, Capture().Count);
+        }
+
+        [Test]
+        public void IdReusedBeforeTheOldEndWasSeen_OldEndsNewBegins()
+        {
+            BeginTouch(1, new Vector2(100, 200));
+            var first = Only(Capture()).touchId;
+            EndTouch(1, new Vector2(100, 200));
+            InputSystem.Update();
+            BeginTouch(1, new Vector2(300, 300), time: currentTime + 0.5);
+            var frame = Capture();
+
+            Assert.AreEqual(2, frame.Count);
+            var old = frame.Touches.Single(t => t.touchId == first);
+            var fresh = frame.Touches.Single(t => t.touchId != first);
+            Assert.AreEqual(TouchPointPhase.Ended, old.phase);
+            Assert.AreEqual(TouchPointPhase.Began, fresh.phase);
         }
 
         [Test]

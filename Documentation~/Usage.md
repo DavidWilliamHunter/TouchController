@@ -1,8 +1,8 @@
 # Using TouchController
 
-TouchController turns raw touches into **gestures** on Android, iOS and Windows touch devices (e.g. Microsoft Surface). It deliberately stops there: it does not decide what the user *meant*. That is the job of your **context** code, which turns gestures into **intentions**, and your game or app code, which carries out the **action**.
+TouchController turns raw touches into **gestures** on Android, iOS and Windows touch devices (e.g. Microsoft Surface). Gestures say what the fingers did, not what the user *meant*. That is the job of **intentions**: your context code (section 7), or the package's **intention system** (section 7a). Your game or app code then carries out the **action**.
 
-> **Status of this document.** Everything described here exists (phases 1–5: settings, input layer, `TouchSystem`, the gesture core and the built-in gestures), except where marked 🚧. The strategy-map example (section 7) is illustrative *user* code: its game types (`CameraRig`, `UnitSelection`, …) are yours, but the TouchController API it uses is real. See `plan.md` in the project root for the design.
+> **Status of this document.** Everything described here exists (settings, input layer, `TouchSystem`, the gesture core, the built-in gestures and the intention system), except where marked 🚧. The strategy-map example (section 7) is illustrative *user* code: its game types (`CameraRig`, `UnitSelection`, …) are yours, but the TouchController API it uses is real. See `plan.md` in the project root for the design.
 
 ---
 
@@ -26,7 +26,7 @@ flowchart LR
 | Layer | Question it answers | Example |
 |---|---|---|
 | **Gesture** (this package) | *What did the fingers do?* | "A Drag entered, then exited with a Swipe of 900 dp/s to the left." |
-| **Intention** (your context code) | *What did the user mean, given what's on screen?* | "The drag started on the map, not a unit, so: pan the camera, then fling it." |
+| **Intention** (your context code, or the intention system, §7a) | *What did the user mean, given what's on screen?* | "The drag started on the map, not a unit, so: pan the camera, then fling it." |
 | **Action** (your game) | *What happens?* | Camera moves with inertia. |
 
 The important consequence: **one input often produces several gestures at once**, and that is correct. A quick drag that ends fast is both a *Drag* and a *Swipe*. A tap is also the first half of a possible *DoubleTap*. The package reports all of them, and your context code chooses.
@@ -260,7 +260,7 @@ All thresholds come from the settings (section 4), so they follow the platform a
 | `LongPressGesture` | 1 per instance | continuous | held for the long-press time within slop (no input needed) | Exit on lift. Fail: `Moved`, `Released`. May move after Enter. | position |
 | `DragGesture` | 1 per instance | continuous | moved beyond slop | Exit on lift. Fail: `Released` (never moved) | `DeltaDp`, velocity |
 | `SwipeGesture` | 1 per instance | discrete | Enter + Exit on a fast lift along an axis | Fail: `Released` (didn't move), `TooSlow` (incl. pausing before the lift), `Direction` (> tolerance from an axis) | `Direction` (±x / ±y), release velocity (clamped) |
-| `PinchGesture` | all | continuous | span ≥ min span **and** changed by > 2 × slop | Exit when < 2 fingers or span < min. Fail: `FingerCount` | `Scale` (since Possible), `ScaleDelta` |
+| `PinchGesture` | all | continuous | span ≥ min span **and** changed by > 2 × slop. Span: the fingers' distance apart (with 3+ fingers, twice their mean distance from the centre), as Android | Exit when < 2 fingers or span < min. Fail: `FingerCount` | `Scale` (since Possible), `ScaleDelta` |
 | `RotateGesture` | all | continuous | turned ≥ min rotation | Exit when < 2 fingers. Fail: `FingerCount` | `AngleDeg` (CCW +, unlimited), `AngleDeltaDeg` |
 | `TwoFingerPanGesture` | all | continuous | centroid moved beyond slop | Exit when < 2 fingers. Fail: `FingerCount` | `DeltaDp` of the centroid |
 | `TwoFingerTapGesture` | 2 | discrete | Enter + Exit when both have lifted | Fail: `Timeout` (2nd finger later than the window), `Released`, `Moved`, `Held`, `FingerCount` | — |
@@ -339,7 +339,7 @@ touch.Get<RotateGesture>().Enabled = false;   // OnDisabled fires; nothing else 
 touch.Get<RotateGesture>().Enabled = true;    // OnEnabled fires; Rotate starts again with a new touch sequence
 ```
 
-A disabled gesture is silent: it discards its instances **without** `Fail` or `Exit`. When re-enabled it is reset. If any finger is on the screen at that moment, it waits until the screen is completely clear (`RunState == WaitingForClear`), so it never starts halfway through a touch. If the screen is already clear, it runs at once. Disabling from inside an event handler takes effect immediately: nothing more is sent that frame.
+A disabled gesture is silent: it discards its instances **without** `Fail` or `Exit`. When re-enabled it is reset. If any finger is on the screen at that moment, it waits until the screen is completely clear (`RunState == WaitingForClear`), so it never starts halfway through a touch. If the screen is already clear, it runs at once. Disabling from inside an event handler takes effect immediately: nothing more is sent that frame, not even the current event to the handlers subscribed after yours (they get `OnDisabled` instead).
 
 Gestures also ignore any touch that was already down when the system started. They only react to touches they saw begin.
 
@@ -401,7 +401,7 @@ public sealed class HoldGesture : GestureBase<GestureInstance>
 
 Per-instance data goes in your own instance class, e.g. `class DoubleTapInstance : GestureInstance { public double FirstUpTime; }` with `GestureBase<DoubleTapInstance>`. Gesture-specific *settings* (e.g. "needs 2 fingers") are serialised fields on the gesture asset. Shared thresholds always come from `Settings`, never from fields of your own, so each value has one home.
 
-**Blocking is your job.** The package doesn't know about UI. If a touch starts on a button, your context code should ignore the gestures for that finger. See the example below.
+**Blocking is not the gestures' job.** Gestures don't know about UI. If a touch starts on a button, the gestures for that finger should be ignored: by your context code (section 7) or by an intention's area (section 7a).
 
 ---
 
@@ -643,6 +643,182 @@ _touch.Shutdown();
 | 300 ms, no second tap | `DoubleTap` **Fail(Timeout)** | It was a single tap: **move the unit**. |
 
 If a second tap had arrived in time, `DoubleTap` would have entered instead, and the pending move would have been dropped in favour of **focus camera**.
+
+---
+
+## 7a. Intentions ✅
+
+Section 7 does the intention layer by hand. The package's **intention system** (namespace `Threads.TouchController.Intentions`) does the same work declaratively:
+- it remembers what each finger touched down on;
+- it decides which intention gets a finger;
+- it waits for a double tap to fail;
+- it suppresses a one-finger drag during a pinch.
+
+An **`Intention`** plays the role of an Input System `InputAction`, and you define one per thing the user can mean. **Your code still decides the action.**
+
+### Starting it
+
+`IntentionSystem` follows the same rules as `TouchSystem`: one start-up and one shut-down point, no globals, and you pass it to whatever needs it. Update it **straight after** the touch system:
+
+```csharp
+_touch = new TouchSystem(options);
+_intentions = new IntentionSystem(_touch);
+
+// OnEnable
+_touch.Startup();
+_intentions.Startup();
+
+// Update
+_touch.Update();
+_intentions.Update();      // gesture events are resolved here, together
+
+// OnDisable
+_intentions.Shutdown();    // ends every instance with Ended(Disabled)
+_touch.Shutdown();
+```
+
+For scenes there is a ready-made bootstrap, **`IntentionRunner`** (see *In the inspector* below).
+
+### Defining an intention
+
+```csharp
+var frameDrag = new Intention("Frame drag", _intentions)
+    .Bind<DragGesture>()                          // the gestures that drive it
+    .InArea(new RectTransformArea(frameRect))     // where it applies (checked at touch-down)
+    .WithPriority(10)
+    .Exclusive();                                 // it takes its fingers from lower priorities
+frameDrag.Started   += e => frame.BeginDrag();
+frameDrag.Performed += e => frame.anchoredPosition += e.DeltaPx / canvas.scaleFactor;
+frameDrag.Ended     += e => frame.EndDrag(e.Reason == IntentionReason.Completed);
+frameDrag.Enabled = true;                         // registers it with the system
+```
+
+- **Bindings:** `Bind<T>()` (a gesture type; a base class covers its platform variants), `Bind(gestureAsset)`, or `Bind(source)` for non-touch input (see *Other input*).
+- **Enabling:** an intention starts disabled. `Enabled = true` registers it. If the system isn't running yet, it joins at `Startup`. `Enabled = false` ends its instances with `Ended(Disabled)`.
+- **Changing it:** bindings and requirements can only change while it is disabled. Everything else can change at any time.
+
+### The life of an intention
+
+Each **instance**, one per gesture instance it accepts, runs `Possible → Rejected`, or `Possible → Started → Performed+ → Ended`.
+
+| Event | When | Use |
+|---|---|---|
+| `Possible` | A bound gesture became Possible on fingers the area accepts. | Early feedback (pressed look). |
+| `Rejected(reason)` | It never started: `GestureFailed`, `LostToPriority`, `RequiredGestureEntered`, `RequirementNotMet`, `LeftArea`, `Cancelled`, `Disabled`. | Undo the early feedback. |
+| `Started` | The gesture entered, the requirements were met and the claim was granted. | Begin the action. |
+| `Performed` | Straight after `Started`, then every update. **Only `Performed` carries movement** (`DeltaDp`, `ScaleDelta`, `AngleDeltaDeg`): the movement since the previous `Performed`. A tap sends exactly one. | Move, zoom or turn, or a one-shot action (a click). |
+| `Ended(reason)` | `Completed`, `Cancelled` (the OS took the touch), `Preempted`, `Disabled`, `LeftArea`. | Finish or undo. |
+
+**Guarantees:**
+- Every subscriber sees each instance's events in this order, even when a handler disables an intention or shuts the system down.
+- `Started` is followed by `Performed` unless a `Started` handler ends the instance.
+- A handler that throws is logged, and the other handlers still run.
+
+`IntentionEventData` has:
+- the position, in dp and px, the start position and the velocity;
+- the scale and angle, and their deltas;
+- the tap count, direction and edge;
+- the fingers;
+- `Target`, whatever the area hit (a `Button`, a `WorldHit`, …);
+- `Source` (Gesture, Manual or InputAction) and the `Gesture` that drove the instance.
+
+### Areas: where an intention applies
+
+By default an area is asked **once per finger, where it touched down**, and the answer is kept. The thing under the finger may move, but the decision doesn't. With no area, the intention applies everywhere.
+
+| Area | What it checks |
+|---|---|
+| `ScreenRectArea.Dp(rect)` / `.Px(rect)` / `.Fraction(rect01)` / `.Anchored(anchor, pivot, offsetDp, sizeDp)` | A rectangle on the screen. |
+| `RectTransformArea(rect, camera)` | Inside a UI rectangle, whatever covers it. Cheap. |
+| `UiRaycastArea(eventSystem, root)` / `UiRaycastArea.For<Button>(eventSystem, root)` | Unity UI's top-most hit, inside `root`. Optionally it must be a given component, which becomes the target. |
+| `PhysicsRaycastArea(camera, PhysicsWorld.Both, layers)` / `.For<Unit>(camera)` | A ray from the camera through the finger, against 3D and/or 2D colliders. With both, the nearest hit wins. Each half compiles only with its physics module. |
+| `Area.From(p => …)`, `Area.Not(a)`, `Area.All(a, b)`, `Area.Any(a, b)` | Your own test, and combinations, such as `Area.Not(hud)` for "not on the HUD". |
+
+Options:
+- **`AreaCheck.Continuous`:** also re-checked at every update; leaving the area ends the instance (`LeftArea`).
+- **`FingerRule`:** for multi-finger gestures, `Any` (default), `All` or `Primary` finger must be in the area.
+
+### Priority, claims and requirements
+
+When several intentions want the same finger:
+
+- **`Shared`** (default): intentions overlap, like gestures.
+- **`Exclusive`:** when it starts, it takes its fingers. Lower-priority instances on them are rejected (`LostToPriority`), or ended (`Preempted`) if they had started. While it is active, intentions of equal or lower priority can't start on those fingers.
+- **Ties:** requests in the same update are granted by priority, then by the order the intentions were enabled. The result never depends on the order of gestures in the lineup.
+- **Same intention:** instances of one intention never compete. One intention bound to `TwoFingerPanGesture`, `PinchGesture` and `RotateGesture` runs all three together.
+- **`RequireFailure<T>()`:** start only once every `T` on the same fingers has failed. Until then the instance is `Waiting`, and if a `T` enters, it is rejected. This is section 7's "wait for `DoubleTap` Fail(Timeout)" in one call.
+- **`RequireActive<T>()`:** start only while a `T` is active on the same fingers, e.g. drag after a long press.
+
+### Example: a frame you can drag from its buttons
+
+A frame should move when dragged from anywhere inside it, *including from one of its buttons*, while a tap on a button still presses it.
+
+1. **The frame drag** is the intention above: `Drag`, the frame's rectangle, priority 10, exclusive.
+2. **The buttons**, in one of two ways:
+   - **Unity UI presses them** (the usual setup). Add an **`IntentionDragRelay`** to the frame and call **`EventSystemSync.Apply(eventSystem, touch)`** after `Startup` and `Refresh`. uGUI's drag threshold then equals the touch slop. When a drag starts on the frame, uGUI releases the button **without a click**, in the same update that our Drag gesture enters. Without the relay, uGUI clicks a button that is released over it, however far the finger moved.
+   - **Intentions press them**, when uGUI's input module isn't handling touch: `new UiPointerIntention(_intentions, eventSystem, canvasTransform) { Enabled = true }`. The button looks pressed at touch-down. A tap clicks it. If the frame drag takes the finger, the press is released with no click. **Don't use both on one canvas.**
+
+The **Intentions Frame Demo** scene (Demo Scenes sample) does exactly this, with a switch between the two.
+
+### Example: section 7's strategy map, declared
+
+| Section 7's decision | As an intention |
+|---|---|
+| Ignore fingers that start on the HUD | Each intention's area includes `Area.Not(new UiRaycastArea(eventSystem))`. |
+| Tap a unit: **select** at once | `Bind<TapGesture>()`, area `PhysicsRaycastArea.For<Unit>(camera)`. `Performed`: `selection.Select(((WorldHit)e.Target).Component as Unit)`. |
+| Tap the ground: **move**, but only once it's not a double tap | `Bind<TapGesture>().RequireFailure<DoubleTapGesture>()`. `Performed`: `selection.MoveTo(...)`. |
+| Double tap: **focus camera** | `Bind<DoubleTapGesture>()`. `Started`: focus. |
+| Long press a unit: **menu**; then drag: **drag the unit** | `Bind<LongPressGesture>()` on units. `Bind<DragGesture>().RequireActive<LongPressGesture>()` on units, priority 10, exclusive. |
+| Drag the map: **pan**; flick: **fling** | `Bind<DragGesture>()` on the ground; `Bind<SwipeGesture>()` on the ground. |
+| Pinch: **zoom**; stop panning meanwhile | `Bind<PinchGesture>()`, priority 20, exclusive: it preempts the one-finger pan. |
+
+### Other input: mouse, gamepad, keyboard
+
+Non-touch input drives the same intentions, through the same areas, priorities and events, so a frame drag can work with a mouse or a gamepad as well:
+
+```csharp
+// Input System actions:
+var mouse = InputActionSource.Pointer(_intentions, pressAction, positionAction);   // e.g. <Mouse>/leftButton, <Mouse>/position
+var stick = InputActionSource.Stick(_intentions, moveAction, 600f, () => frameCentreDp);   // a stick moves it at up to 600 dp/s
+frameDrag.Bind(mouse.Source).Bind(stick.Source);   // bind while the intention is disabled
+
+// Anything else, by hand:
+var remote = _intentions.CreateSource("Remote");
+remote.Begin(positionDp); remote.MoveBy(deltaDp); remote.End();   // or remote.Tap(positionDp), ScaleBy, RotateBy, Cancel
+```
+
+A source acts like one extra finger, with a negative pointer ID, so it never clashes with a touch.
+- A **pointer** begins where it is pressed (the area is checked there).
+- A **stick** begins at the position you give, e.g. the frame's centre, and moves by value × speed × time at every update.
+- `InputActionSource` enables only the actions that were off, and disables only those again when it is disposed.
+
+### In the inspector
+
+- **`IntentionRunner`** (*Add Component → Threads → TouchController → Intention Runner*): owns a `TouchSystem` and an `IntentionSystem`. It starts them in `OnEnable`, updates them, and shuts them down in `OnDisable`. Give it an EventSystem to keep uGUI's drag threshold in step.
+- **`IntentionBehaviour`** (*… → Intention*): an intention set up in the inspector:
+  - gesture assets, requirements, priority, claim;
+  - an area relative to its GameObject: `Everywhere`, `RectTransform`, `UiRaycast`, or `Physics` (colliders on this object or its children);
+  - UnityEvents for the five events.
+
+  Set its **Runner** field; that reference is explicit, with no global lookup. Without a runner, call `behaviour.Attach(intentionSystem, eventSystem)` from your own bootstrap.
+- **Misconfiguration** (a gesture that isn't in the lineup, an area that is missing its camera) is logged as an error, and that intention stays inactive.
+
+### Testing intention code
+
+`IntentionSystemHarness` runs a platform's full lineup and an `IntentionSystem` on scripted touches. `IntentionEventLog` records an intention's events as text, and lists any broken lifecycle rule in `Violations`:
+
+```csharp
+using var h = new IntentionSystemHarness();
+var drag = h.Enable(new Intention("Drag", h.Intentions).Bind<DragGesture>());
+var log = h.Log(drag);
+h.Input.Down(1, new Vector2(100, 100)); h.Input.Step();
+h.Input.Drag(1, new Vector2(200, 100), durationMs: 200);
+h.Input.Up(1); h.Input.Step();
+CollectionAssert.AreEqual(new[] { "Possible#1", "Started#1", "Ended(Completed)#1" }, log.WithoutPerformed());
+Assert.IsEmpty(h.Violations());
+```
+
+For non-touch sources, call `source.Begin/MoveBy/End` between steps. For the Input System, combine the harness with the Input System's `InputTestFixture`.
 
 ---
 

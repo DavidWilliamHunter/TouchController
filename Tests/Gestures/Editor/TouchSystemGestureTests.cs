@@ -154,6 +154,40 @@ namespace Threads.TouchController.Tests
             Assert.Throws<InvalidOperationException>(() => _system.Get<IGesture>());
         }
 
+        // ---- TryGetRuntime -------------------------------------------------------------------
+
+        [Test]
+        public void TryGetRuntime_FindsCopyOfLineupAsset()
+        {
+            Start(new GestureEntry(_tapAsset), new GestureEntry(_holdAsset));
+
+            Assert.IsTrue(_system.TryGetRuntime(_holdAsset, out var runtime));
+            Assert.AreSame(_system.Get<TestHoldGesture>(), runtime);
+        }
+
+        [Test]
+        public void TryGetRuntime_FindsAddedCopy_AndAcceptsRunningGesture()
+        {
+            Start();
+            var added = _system.Add(_holdAsset);
+
+            Assert.IsTrue(_system.TryGetRuntime(_holdAsset, out var fromAsset));
+            Assert.AreSame(added, fromAsset);
+            Assert.IsTrue(_system.TryGetRuntime(added, out var fromRuntime));
+            Assert.AreSame(added, fromRuntime);
+        }
+
+        [Test]
+        public void TryGetRuntime_UnknownOrRemoved_ReturnsFalse()
+        {
+            Start(new GestureEntry(_tapAsset));
+            Assert.IsFalse(_system.TryGetRuntime(_holdAsset, out _));
+            Assert.IsFalse(_system.TryGetRuntime(null, out _));
+
+            _system.Remove(_system.Get<TestTapGesture>());
+            Assert.IsFalse(_system.TryGetRuntime(_tapAsset, out _));
+        }
+
         // ---- Add / Remove --------------------------------------------------------------------
 
         [Test]

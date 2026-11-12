@@ -2,7 +2,9 @@
     "name": "Threads.TouchController.Demo",
     "rootNamespace": "Threads.TouchController.Demo",
     "references": [
-        "Threads.TouchController"
+        "Threads.TouchController",
+        "Unity.InputSystem",
+        "UnityEngine.UI"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

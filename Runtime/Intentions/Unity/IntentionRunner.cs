@@ -1,0 +1,132 @@
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.EventSystems;
+
+namespace Threads.TouchController.Intentions
+{
+    /// <summary>
+    /// A ready-made bootstrap for scenes: owns a <see cref="TouchSystem"/> and an <see cref="IntentionSystem"/>,
+    /// starts them in OnEnable, updates them every frame (touch first, then intentions) and shuts them down in
+    /// OnDisable. <see cref="IntentionBehaviour"/>s that name this runner attach to it.
+    /// </summary>
+    /// <remarks>
+    /// Not a singleton: there can be several, and nothing finds it globally. Components reach it through a
+    /// serialized reference. For full control (or a DI container), skip this component, create the systems in
+    /// your own code and call <see cref="IntentionBehaviour.Attach"/>.
+    /// </remarks>
+    [DisallowMultipleComponent]
+    [DefaultExecutionOrder(-100)] // events are sent from Update: before the scripts that read the results
+    [AddComponentMenu("Threads/TouchController/Intention Runner")]
+    public sealed class IntentionRunner : MonoBehaviour
+    {
+        [Tooltip("Optional. Empty: the shipped default settings for the platform.")]
+        [SerializeField] private TouchSettings settings;
+
+        [Tooltip("Use the conventions of a specific platform instead of the one the app runs on.")]
+        [SerializeField] private bool overridePlatform;
+
+        [SerializeField] private TouchPlatform platform = TouchPlatform.Android;
+
+        [Tooltip("In the Editor, turn the mouse into touches.")]
+        [SerializeField] private bool simulateTouchInEditor = true;
+
+        [Tooltip("Optional. Its drag threshold is kept equal to the touch slop (EventSystemSync), and UI areas of attached intentions use it.")]
+        [SerializeField] private EventSystem eventSystem;
+
+        private readonly List<IntentionBehaviour> _members = new List<IntentionBehaviour>();
+
+        /// <summary>Settings asset (null: the platform's default). Takes effect the next time the runner is enabled.</summary>
+        public TouchSettings Settings
+        {
+            get => settings;
+            set => settings = value;
+        }
+
+        /// <summary>A platform whose conventions to use instead of the running one (null: the running one). Takes effect when next enabled.</summary>
+        public TouchPlatform? PlatformOverride
+        {
+            get => overridePlatform ? platform : (TouchPlatform?)null;
+            set
+            {
+                overridePlatform = value.HasValue;
+                if (value.HasValue) platform = value.Value;
+            }
+        }
+
+        /// <summary>In the Editor, turn the mouse into touches. Takes effect when next enabled.</summary>
+        public bool SimulateTouchInEditor
+        {
+            get => simulateTouchInEditor;
+            set => simulateTouchInEditor = value;
+        }
+
+        public TouchSystem Touch { get; private set; }
+
+        public IntentionSystem Intentions { get; private set; }
+
+        /// <summary>Optional EventSystem (drag threshold sync, UI areas). Takes effect when next enabled.</summary>
+        public EventSystem EventSystem
+        {
+            get => eventSystem;
+            set => eventSystem = value;
+        }
+
+        public bool IsRunning => Intentions != null && Intentions.IsRunning;
+
+        private void OnEnable()
+        {
+            Touch = new TouchSystem(new TouchSystemOptions
+            {
+                Settings = settings,
+                Platform = overridePlatform ? platform : (TouchPlatform?)null,
+                SimulateTouchInEditor = simulateTouchInEditor,
+            });
+            Touch.Startup();
+            Intentions = new IntentionSystem(Touch);
+            Intentions.Startup();
+            if (eventSystem != null)
+                EventSystemSync.Apply(eventSystem, Touch);
+            foreach (var member in _members.ToArray())
+                member.Attach(Intentions, eventSystem);
+        }
+
+        private void Update()
+        {
+            Touch.Update();
+            Intentions.Update();
+        }
+
+        private void OnApplicationFocus(bool hasFocus)
+        {
+            // The user may have changed a touch setting (accessibility) while away.
+            if (!hasFocus || !IsRunning) return;
+            Touch.Refresh();
+            if (eventSystem != null)
+                EventSystemSync.Apply(eventSystem, Touch);
+        }
+
+        private void OnDisable()
+        {
+            foreach (var member in _members.ToArray())
+                member.Detach();
+            Intentions?.Shutdown();
+            Touch?.Shutdown();
+            Intentions = null;
+            Touch = null;
+        }
+
+        /// <summary>Called by an IntentionBehaviour that names this runner; it is attached now if running, or when the runner starts.</summary>
+        internal void Join(IntentionBehaviour member)
+        {
+            if (_members.Contains(member)) return;
+            _members.Add(member);
+            if (IsRunning) member.Attach(Intentions, eventSystem);
+        }
+
+        internal void Leave(IntentionBehaviour member)
+        {
+            _members.Remove(member);
+            member.Detach();
+        }
+    }
+}

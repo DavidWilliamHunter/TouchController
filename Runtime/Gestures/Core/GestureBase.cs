@@ -42,17 +42,61 @@ namespace Threads.TouchController
         private TouchFrame _frame;
         private bool _processing;
         private bool _discardPending;
+        private Func<bool> _stillSending; // cached: no allocation per event
         private bool _lastFrameAnyInContact; // fingers on the screen in the latest frame seen (even while disabled)
         private float _pixelsPerDp = 1f;
         private double _time;
 
-        public event Action<GestureEventData> Possible;
-        public event Action<GestureEventData> Fail;
-        public event Action<GestureEventData> Enter;
-        public event Action<GestureEventData> Stay;
-        public event Action<GestureEventData> Exit;
-        public event Action<IGesture> OnEnabled;
-        public event Action<IGesture> OnDisabled;
+        // Each handler is called on its own (HandlerList), so one that throws doesn't stop the others.
+        private readonly HandlerList<GestureEventData> _possible = new HandlerList<GestureEventData>();
+        private readonly HandlerList<GestureEventData> _fail = new HandlerList<GestureEventData>();
+        private readonly HandlerList<GestureEventData> _enter = new HandlerList<GestureEventData>();
+        private readonly HandlerList<GestureEventData> _stay = new HandlerList<GestureEventData>();
+        private readonly HandlerList<GestureEventData> _exit = new HandlerList<GestureEventData>();
+        private readonly HandlerList<IGesture> _onEnabled = new HandlerList<IGesture>();
+        private readonly HandlerList<IGesture> _onDisabled = new HandlerList<IGesture>();
+
+        public event Action<GestureEventData> Possible
+        {
+            add => _possible.Add(value);
+            remove => _possible.Remove(value);
+        }
+
+        public event Action<GestureEventData> Fail
+        {
+            add => _fail.Add(value);
+            remove => _fail.Remove(value);
+        }
+
+        public event Action<GestureEventData> Enter
+        {
+            add => _enter.Add(value);
+            remove => _enter.Remove(value);
+        }
+
+        public event Action<GestureEventData> Stay
+        {
+            add => _stay.Add(value);
+            remove => _stay.Remove(value);
+        }
+
+        public event Action<GestureEventData> Exit
+        {
+            add => _exit.Add(value);
+            remove => _exit.Remove(value);
+        }
+
+        public event Action<IGesture> OnEnabled
+        {
+            add => _onEnabled.Add(value);
+            remove => _onEnabled.Remove(value);
+        }
+
+        public event Action<IGesture> OnDisabled
+        {
+            add => _onDisabled.Add(value);
+            remove => _onDisabled.Remove(value);
+        }
 
         public string Name => name;
 
@@ -368,15 +412,7 @@ namespace Threads.TouchController
             _runState = !value
                 ? GestureRunState.Disabled
                 : _lastFrameAnyInContact ? GestureRunState.WaitingForClear : GestureRunState.Running;
-            var handler = value ? OnEnabled : OnDisabled;
-            try
-            {
-                handler?.Invoke(this);
-            }
-            catch (Exception e)
-            {
-                Debug.LogException(e, this);
-            }
+            (value ? _onEnabled : _onDisabled).Invoke(this, this);
         }
 
         private void Discard()
@@ -487,27 +523,21 @@ namespace Threads.TouchController
             instance.LastEventScale = instance.Scale;
             instance.LastEventAngleDeg = instance.AngleDeg;
 
-            var handler = type switch
+            var handlers = type switch
             {
-                GestureEventType.Possible => Possible,
-                GestureEventType.Fail => Fail,
-                GestureEventType.Enter => Enter,
-                GestureEventType.Stay => Stay,
-                _ => Exit,
+                GestureEventType.Possible => _possible,
+                GestureEventType.Fail => _fail,
+                GestureEventType.Enter => _enter,
+                GestureEventType.Stay => _stay,
+                _ => _exit,
             };
-            if (handler == null)
+            if (handlers.IsEmpty)
                 return;
 
-            var data = new GestureEventData(this, instance, type, reason, _time, _pixelsPerDp, delta, scaleDelta, angleDelta);
-            try
-            {
-                handler(data);
-            }
-            catch (Exception e)
-            {
-                // A failing consumer must not break recognition for everyone else.
-                Debug.LogException(e, this);
-            }
+            // If a handler disables the gesture, the handlers after it don't get this event: they get OnDisabled
+            // (sent at once) and nothing more, so no one sees an instance after being told it was discarded.
+            _stillSending ??= () => !_discardPending && _runState == GestureRunState.Running;
+            handlers.Invoke(new GestureEventData(this, instance, type, reason, _time, _pixelsPerDp, delta, scaleDelta, angleDelta), this, _stillSending);
         }
 
         private bool Any(GestureState state)

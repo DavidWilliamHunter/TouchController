@@ -32,6 +32,7 @@ namespace Threads.TouchController.Demo
 
         public static string SurfaceScenePath => ScenesFolder + "/SurfaceDemo.unity";
         public static string AndroidScenePath => ScenesFolder + "/AndroidDemo.unity";
+        public static string FrameScenePath => ScenesFolder + "/IntentionsFrameDemo.unity";
 
         [MenuItem("Threads/TouchController/Create Surface Demo Scene")]
         public static void BuildSurface() => Build(SurfaceScenePath, "Surface Demo", DemoPlatform.Windows);
@@ -39,14 +40,35 @@ namespace Threads.TouchController.Demo
         [MenuItem("Threads/TouchController/Create Android Demo Scene")]
         public static void BuildAndroid() => Build(AndroidScenePath, "Android Demo", DemoPlatform.Android);
 
-        /// <summary>Both scenes (used from the command line: -executeMethod Threads.TouchController.Demo.DemoSceneBuilder.BuildAll).</summary>
+        [MenuItem("Threads/TouchController/Create Intentions Frame Demo Scene")]
+        public static void BuildFrame()
+        {
+            var scene = NewSceneWithCamera();
+            new GameObject("Intentions Frame Demo").AddComponent<FrameDemo>();
+            Save(scene, FrameScenePath, "Intentions Frame Demo");
+        }
+
+        /// <summary>Every demo scene (used from the command line: -executeMethod Threads.TouchController.Demo.DemoSceneBuilder.BuildAll).</summary>
         public static void BuildAll()
         {
             BuildSurface();
             BuildAndroid();
+            BuildFrame();
         }
 
         public static void Build(string path, string name, DemoPlatform platform)
+        {
+            var scene = NewSceneWithCamera();
+
+            var demo = new GameObject(name).AddComponent<TouchDemo>();
+            var serialized = new SerializedObject(demo);
+            serialized.FindProperty("platform").enumValueIndex = (int)platform;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+
+            Save(scene, path, $"{name} ({platform} conventions)");
+        }
+
+        private static UnityEngine.SceneManagement.Scene NewSceneWithCamera()
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
@@ -56,15 +78,14 @@ namespace Threads.TouchController.Demo
             camera.clearFlags = CameraClearFlags.SolidColor;
             camera.backgroundColor = new Color(0.11f, 0.12f, 0.15f);
             camera.orthographic = true;
+            return scene;
+        }
 
-            var demo = new GameObject(name).AddComponent<TouchDemo>();
-            var serialized = new SerializedObject(demo);
-            serialized.FindProperty("platform").enumValueIndex = (int)platform;
-            serialized.ApplyModifiedPropertiesWithoutUndo();
-
+        private static void Save(UnityEngine.SceneManagement.Scene scene, string path, string description)
+        {
             System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path));
             EditorSceneManager.SaveScene(scene, path);
-            Debug.Log($"{name} scene saved to {path} ({platform} conventions)");
+            Debug.Log($"{description} scene saved to {path}");
         }
     }
 }
