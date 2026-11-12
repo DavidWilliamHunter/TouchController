@@ -2,6 +2,10 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-11-12
+
+Touch joysticks, and Unity UI controls inside dragged frames: the 0.3.1 preview, released after testing. No code changes since 0.3.1.
+
 ## [0.3.1] - 2026-11-12
 
 A preview build for device testing: touch joysticks, and Unity UI controls inside dragged frames. It may still change before it is released as tested.
