@@ -23,12 +23,12 @@ In the Package Manager choose **+ → Install package from git URL…** and ente
 https://github.com/DavidWilliamHunter/TouchController.git
 ```
 
-To pin a version, add a tag, for example `https://github.com/DavidWilliamHunter/TouchController.git#v0.2.2`.
+To pin a version, add a tag, for example `https://github.com/DavidWilliamHunter/TouchController.git#v0.3.0`.
 
 You can also add it to `Packages/manifest.json` directly:
 
 ```json
-"com.threads.touchcontroller": "https://github.com/DavidWilliamHunter/TouchController.git#v0.2.2"
+"com.threads.touchcontroller": "https://github.com/DavidWilliamHunter/TouchController.git#v0.3.0"
 ```
 
 ## Samples

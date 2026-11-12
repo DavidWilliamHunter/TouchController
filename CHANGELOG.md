@@ -2,6 +2,10 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-11-12
+
+The intention system, after device tests on a Surface and on Android. No code changes since 0.2.2.
+
 ## [0.2.2] - 2026-11-12
 
 A preview build for device testing. The intention system is new and may still change before 0.3.0.
