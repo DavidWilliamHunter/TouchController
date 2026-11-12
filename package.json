@@ -1,6 +1,6 @@
 {
   "name": "com.threads.touchcontroller",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "displayName": "TouchController",
   "description": "Touch gesture recognition for Android, iOS and Windows touch (Surface) devices, built on the Unity Input System. Thresholds follow each platform's conventions in density-independent units and honour OS accessibility settings where they can be read.",
   "unity": "6000.3",
@@ -29,7 +29,7 @@
   "samples": [
     {
       "displayName": "Demo Scenes",
-      "description": "Surface (Windows) and Android demo scenes: finger markers, gesture toggles, an event feed and a card that turns gestures into intentions. Plus an Intentions Frame Demo: a frame you can drag from anywhere, even from its buttons, while a tap on a button still presses it. Rebuild the scenes from Threads > TouchController.",
+      "description": "Surface (Windows) and Android demo scenes: finger markers, gesture toggles, an event feed and a card that turns gestures into intentions. Plus an Intentions Frame Demo: a frame you can drag from anywhere, even from its buttons, while a tap on a button still presses it, and its slider, list and text field keep their own drags. And a Joystick Demo: floating and fixed touch joysticks read through Input System actions. Rebuild the scenes from Threads > TouchController.",
       "path": "Samples~/Demo"
     },
     {

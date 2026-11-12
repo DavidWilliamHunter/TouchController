@@ -70,21 +70,29 @@ namespace Threads.TouchController.Intentions
         public static UiRaycastArea For<T>(EventSystem eventSystem, Transform root = null) where T : Component =>
             new UiRaycastArea(eventSystem, root, typeof(T));
 
+        /// <summary>
+        /// Where the top-most UI hit is inside a control that handles drags itself (Slider, Scrollbar,
+        /// ScrollRect, InputField, TMP_InputField, or any interactable <see cref="IDragHandler"/> other than an
+        /// <see cref="IntentionDragRelay"/>) that is inside <paramref name="root"/>. The control is the target.
+        /// </summary>
+        /// <remarks>
+        /// uGUI sends a drag to the nearest drag handler above the touched object, so a frame's
+        /// <see cref="IntentionDragRelay"/> never sees drags that start on such a control, and the control and
+        /// a frame-drag intention would both move. Exclude them from the frame's area:
+        /// <code>Area.All(new RectTransformArea(frame), Area.Not(UiRaycastArea.DragOwners(eventSystem, frame)))</code>
+        /// A drag handler above <paramref name="root"/> (e.g. a ScrollRect the frame sits in) doesn't count.
+        /// </remarks>
+        public static IIntentionArea DragOwners(EventSystem eventSystem, Transform root = null) =>
+            new DragOwnerArea(new UiRaycastArea(eventSystem, root, null), root);
+
+        internal static IIntentionArea DragOwners(EventSystem eventSystem, Transform root,
+            Action<PointerEventData, List<RaycastResult>> raycastAll) =>
+            new DragOwnerArea(new UiRaycastArea(eventSystem, root, null, raycastAll), root);
+
         public bool Accepts(in IntentionPoint point, out object target)
         {
             target = null;
-            if (_eventSystem == null || !_eventSystem.isActiveAndEnabled) return false;
-
-            _pointer ??= new PointerEventData(_eventSystem);
-            _pointer.Reset();
-            _pointer.position = point.PositionPx;
-            _pointer.pointerId = point.InputTouchId;
-            _hits.Clear();
-            _raycastAll(_pointer, _hits);
-            if (_hits.Count == 0) return false;
-
-            var hit = _hits[0].gameObject; // sorted: the top-most first
-            _hits.Clear();
+            var hit = TopHit(point);
             if (hit == null) return false;
             if (_root != null && !hit.transform.IsChildOf(_root)) return false;
 
@@ -97,6 +105,67 @@ namespace Threads.TouchController.Intentions
             if (component == null || (_root != null && !component.transform.IsChildOf(_root))) return false;
             target = component;
             return true;
+        }
+
+        /// <summary>The top-most UI object under the point, or null.</summary>
+        internal GameObject TopHit(in IntentionPoint point)
+        {
+            if (_eventSystem == null || !_eventSystem.isActiveAndEnabled) return null;
+
+            _pointer ??= new PointerEventData(_eventSystem);
+            _pointer.Reset();
+            _pointer.position = point.PositionPx;
+            _pointer.pointerId = point.InputTouchId;
+            _hits.Clear();
+            _raycastAll(_pointer, _hits);
+            if (_hits.Count == 0) return null;
+
+            var hit = _hits[0].gameObject; // sorted: the top-most first
+            _hits.Clear();
+            return hit;
+        }
+
+        private sealed class DragOwnerArea : IIntentionArea
+        {
+            private readonly UiRaycastArea _raycast;
+            private readonly Transform _root;
+            private readonly List<Component> _components = new List<Component>();
+
+            public DragOwnerArea(UiRaycastArea raycast, Transform root)
+            {
+                _raycast = raycast;
+                _root = root;
+            }
+
+            public bool Accepts(in IntentionPoint point, out object target)
+            {
+                target = null;
+                var hit = _raycast.TopHit(point);
+                if (hit == null) return false;
+                var owner = FindDragOwner(hit);
+                if (owner == null || (_root != null && !owner.transform.IsChildOf(_root))) return false;
+                target = owner;
+                return true;
+            }
+
+            /// <summary>The drag handler uGUI would send a drag starting on <paramref name="hit"/> to, if it is a control.</summary>
+            private Component FindDragOwner(GameObject hit)
+            {
+                var handlerObject = ExecuteEvents.GetEventHandler<IDragHandler>(hit);
+                if (handlerObject == null) return null;
+                Component owner = null;
+                handlerObject.GetComponents(_components);
+                foreach (var c in _components)
+                {
+                    if (!(c is IDragHandler) || c is IntentionDragRelay) continue;
+                    if (c is Behaviour b && !b.isActiveAndEnabled) continue;
+                    if (c is UnityEngine.UI.Selectable s && !s.IsInteractable()) continue; // ignores drags
+                    owner = c;
+                    break;
+                }
+                _components.Clear();
+                return owner;
+            }
         }
     }
 }

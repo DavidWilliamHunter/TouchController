@@ -67,6 +67,9 @@ namespace Threads.TouchController.Intentions
 
         /// <summary>Rejected or Ended: with <see cref="AreaCheck.Continuous"/>, the fingers left the area.</summary>
         LeftArea = 9,
+
+        /// <summary>Rejected: the condition given to <see cref="Intention.StartWhen"/> returned false (or threw) when the gesture entered.</summary>
+        StartConditionFailed = 10,
     }
 
     /// <summary>How an intention shares its fingers with other intentions.</summary>

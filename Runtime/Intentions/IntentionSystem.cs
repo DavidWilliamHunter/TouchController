@@ -430,6 +430,12 @@ namespace Threads.TouchController.Intentions
                 if (inst.State != IntentionState.Possible) continue;
                 var intention = inst.Intention;
 
+                if (intention.StartCondition != null && !StartConditionMet(inst))
+                {
+                    Finish(inst, IntentionReason.StartConditionFailed);
+                    continue;
+                }
+
                 if (intention.RequiredActive.Count > 0 && !RequiredActiveMet(inst))
                 {
                     Finish(inst, IntentionReason.RequirementNotMet);
@@ -447,6 +453,20 @@ namespace Threads.TouchController.Intentions
                 _candidates.Add(inst);
             }
             _requests.Clear();
+        }
+
+        private static bool StartConditionMet(IntentionInstance inst)
+        {
+            try
+            {
+                return inst.Intention.StartCondition(new IntentionEventData(inst, IntentionEventType.Started, IntentionReason.None, false));
+            }
+            catch (Exception e)
+            {
+                // A failing condition must not break arbitration: treat it as "don't start".
+                UnityEngine.Debug.LogException(e);
+                return false;
+            }
         }
 
         private bool RequiredActiveMet(IntentionInstance inst)

@@ -748,6 +748,7 @@ When several intentions want the same finger:
 - **Same intention:** instances of one intention never compete. One intention bound to `TwoFingerPanGesture`, `PinchGesture` and `RotateGesture` runs all three together.
 - **`RequireFailure<T>()`:** start only once every `T` on the same fingers has failed. Until then the instance is `Waiting`, and if a `T` enters, it is rejected. This is section 7's "wait for `DoubleTap` Fail(Timeout)" in one call.
 - **`RequireActive<T>()`:** start only while a `T` is active on the same fingers, e.g. drag after a long press.
+- **`StartWhen(e => ...)`:** start only if the condition holds when the gesture enters. It is asked once, before the claim. If it returns false, the instance is `Rejected(StartConditionFailed)` and the finger stays free for other intentions. Its main use is **axis-lock**: `e.PositionDp - e.StartPositionDp` is the movement so far, so a frame that only moves sideways can let vertical drags through to a scroll view.
 
 ### Example: a frame you can drag from its buttons
 
@@ -819,6 +820,98 @@ Assert.IsEmpty(h.Violations());
 ```
 
 For non-touch sources, call `source.Begin/MoveBy/End` between steps. For the Input System, combine the harness with the Input System's `InputTestFixture`.
+
+---
+
+## 7b. Unity UI's controls inside a dragged frame ✅
+
+Unity UI (uGUI) and the gestures both see every touch. On their own, every control works by touch. Inside a frame that an intention drags, the result depends on the control. PlayMode tests (`DefaultControlsPlayTests`) check Toggle, Slider, ScrollRect and InputField with the real input module and a simulated touchscreen. Button is covered by `IntentionDragRelayPlayTests`. Dropdown is a click like a Button and is not tested separately.
+
+| Control | Tap | Drag that starts on it, inside a dragged frame |
+|---|---|---|
+| Button, Toggle, Dropdown | ✅ works | ✅ With `IntentionDragRelay` on the frame, the frame moves and the control is released with no click. |
+| Slider, Scrollbar | ✅ works | ❌ **Both move**, unless excluded. uGUI sends the drag to the slider, which handles drags itself, so the relay never sees it. |
+| ScrollRect (lists) | ✅ works (a button in the list clicks) | ❌ **Both move**, unless excluded. With the exclusion, the list scrolls and its button isn't clicked. |
+| InputField / TMP_InputField | ✅ focuses (on devices, the on-screen keyboard opens) | ❌ Text is selected **and** the frame moves, unless excluded. |
+| Tooltips, hover styles | ❌ no hover on touch | — |
+
+**The fix: leave out the controls that handle drags themselves.**
+
+```csharp
+var area = Area.All(new RectTransformArea(frame), Area.Not(UiRaycastArea.DragOwners(eventSystem, frame)));
+frameDrag.InArea(area);
+```
+
+`UiRaycastArea.DragOwners(eventSystem, root)` accepts where the top UI hit is inside an interactable drag handler under `root`. That covers Slider, Scrollbar, ScrollRect, InputField and TMP_InputField; an `IntentionDragRelay` doesn't count. In the inspector, tick **Exclude Drag Owners** on the `IntentionBehaviour`.
+
+**Perpendicular controls: axis-lock instead.** A frame that moves only sideways, over a vertical list, can leave the list in its area and use `StartWhen`:
+
+```csharp
+frameDrag.StartWhen(e => { var d = e.PositionDp - e.StartPositionDp; return Mathf.Abs(d.x) > Mathf.Abs(d.y); });
+```
+
+A vertical drag is rejected by the frame, and the list scrolls. A horizontal drag moves the frame, and the list ignores the sideways movement.
+
+**When intentions press the buttons** (`UiPointerIntention`, uGUI's input module off), only taps work. It sends pointer down, up and click, never drag events, so sliders, scroll views and text selection don't respond. Use it only for screens of buttons and toggles.
+
+**On devices:** check when the keyboard opens for a text field (uGUI opens it when the field is selected, at touch-down), and keep controls at least 48 dp.
+
+---
+
+## 7c. Touch joysticks ✅
+
+On-screen joysticks for games: a circular base, and the finger's offset from its centre as the output.
+
+- **Fixed:** in one place; touching the base (plus a margin) grabs it.
+- **Floating:** it appears where a finger touches down inside its zone (e.g. the left half of the screen), and motion is measured from that point. With `Follow`, the base is dragged along when the finger goes past the radius.
+
+Each joystick is an intention bound to `PressGesture`: it responds at touch-down, it is exclusive at priority 1000 (so its finger drives nothing else), and it follows one finger at a time. A second finger in its zone is left for other intentions (e.g. a camera look). Two joysticks, one for each thumb, work independently.
+
+### Reading it directly
+
+```csharp
+var move = new TouchJoystick(_intentions, new TouchJoystickOptions
+{
+    Mode = JoystickMode.Floating,
+    ActivationArea = ScreenRectArea.Fraction(new Rect(0, 0, 0.5f, 1)), // the left half
+    RadiusDp = 60, DeadZone = 0.1f,
+});
+move.Enabled = true;
+// Each frame: player.Move(move.Value);   // −1..1 on each axis, length ≤ 1
+```
+
+- `Value` is the offset over the radius, clamped to length 1. The dead zone is radial, and the rest is rescaled so the output starts at 0. Then `ResponseExponent` is applied (2 gives finer control near the centre).
+- Other state: `IsHeld`, `FingerId`, `OriginDp` (where to draw the base), `ThumbDp` (where to draw the knob; it stays on the rim).
+- Events: `Pressed`, `Changed(Vector2)`, `Released`.
+- Fixed joysticks take `CentreDp` as a function, so the base can follow the layout.
+
+### Through the Input System
+
+Code that reads Input System actions keeps working with touch. The joysticks write to a **`TouchSticks`** device (layout `TouchSticks`, with Vector2 controls `leftStick` and `rightStick`). Add one binding beside your gamepad binding:
+
+```csharp
+var sticks = new TouchSticksDevice();                                  // adds the device; Dispose() removes it
+var output = new JoystickInputOutput(move, sticks, sticks.LeftStick);  // writes every change
+
+// The game's own action:
+moveAction = new InputAction("Move", InputActionType.Value, "<Gamepad>/leftStick");
+moveAction.AddBinding("<TouchSticks>/leftStick");
+```
+
+- The controls also carry the usages `Primary2DMotion` and `Secondary2DMotion`. A binding like `*/{Primary2DMotion}` therefore matches the touch sticks *and* a gamepad's left stick.
+- Values arrive unchanged: the controls have no dead-zone processors of their own, so only the joystick's dead zone applies. A value written by `JoystickInputOutput` is applied at the Input System's next update.
+- The layout is registered when the first `TouchSticksDevice` is created, and in the Editor at load time, so the actions editor's binding picker lists it.
+
+### In the inspector
+
+- On the **`IntentionRunner`**, tick **Create Touch Sticks**. The runner adds the device while it runs, and exposes it as `runner.TouchSticks`.
+- Add **`TouchJoystickBehaviour`** (*Add Component → Threads → TouchController → Touch Joystick*) to a UI RectTransform:
+  - **Fixed:** that RectTransform is the base, and its centre is the origin.
+  - **Floating:** that RectTransform is the zone, e.g. a panel stretched over the left half.
+  - Set **Runner** and **Output** (Left Stick, Right Stick or None), and optionally a **Base Graphic** and a **Knob** (RectTransforms that it moves; floating ones are hidden while released).
+  - UnityEvents: `OnValueChanged`, `OnPressed`, `OnReleased`.
+
+The **Joystick Demo** scene (Demo Scenes sample) has a floating joystick that moves a ship and a fixed one that turns it. The ship reads only Input System actions (touch sticks, gamepad and WASD).
 
 ---
 

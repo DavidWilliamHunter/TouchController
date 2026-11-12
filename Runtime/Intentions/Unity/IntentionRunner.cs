@@ -33,7 +33,10 @@ namespace Threads.TouchController.Intentions
         [Tooltip("Optional. Its drag threshold is kept equal to the touch slop (EventSystemSync), and UI areas of attached intentions use it.")]
         [SerializeField] private EventSystem eventSystem;
 
-        private readonly List<IntentionBehaviour> _members = new List<IntentionBehaviour>();
+        [Tooltip("Add a TouchSticks Input System device while running, for TouchJoystickBehaviours to write to (bind actions to <TouchSticks>/leftStick).")]
+        [SerializeField] private bool createTouchSticks;
+
+        private readonly List<IIntentionRunnerMember> _members = new List<IIntentionRunnerMember>();
 
         /// <summary>Settings asset (null: the platform's default). Takes effect the next time the runner is enabled.</summary>
         public TouchSettings Settings
@@ -71,6 +74,16 @@ namespace Threads.TouchController.Intentions
             set => eventSystem = value;
         }
 
+        /// <summary>Add a <see cref="TouchSticksDevice"/> while running. Takes effect when next enabled.</summary>
+        public bool CreateTouchSticks
+        {
+            get => createTouchSticks;
+            set => createTouchSticks = value;
+        }
+
+        /// <summary>The Input System device for touch joysticks, while running with <see cref="CreateTouchSticks"/>; otherwise null.</summary>
+        public TouchSticksDevice TouchSticks { get; private set; }
+
         public bool IsRunning => Intentions != null && Intentions.IsRunning;
 
         private void OnEnable()
@@ -84,6 +97,8 @@ namespace Threads.TouchController.Intentions
             Touch.Startup();
             Intentions = new IntentionSystem(Touch);
             Intentions.Startup();
+            if (createTouchSticks)
+                TouchSticks = new TouchSticksDevice();
             if (eventSystem != null)
                 EventSystemSync.Apply(eventSystem, Touch);
             foreach (var member in _members.ToArray())
@@ -111,22 +126,32 @@ namespace Threads.TouchController.Intentions
                 member.Detach();
             Intentions?.Shutdown();
             Touch?.Shutdown();
+            TouchSticks?.Dispose();
+            TouchSticks = null;
             Intentions = null;
             Touch = null;
         }
 
-        /// <summary>Called by an IntentionBehaviour that names this runner; it is attached now if running, or when the runner starts.</summary>
-        internal void Join(IntentionBehaviour member)
+        /// <summary>Called by a component that names this runner; it is attached now if running, or when the runner starts.</summary>
+        internal void Join(IIntentionRunnerMember member)
         {
             if (_members.Contains(member)) return;
             _members.Add(member);
             if (IsRunning) member.Attach(Intentions, eventSystem);
         }
 
-        internal void Leave(IntentionBehaviour member)
+        internal void Leave(IIntentionRunnerMember member)
         {
             _members.Remove(member);
             member.Detach();
         }
+    }
+
+    /// <summary>A component attached to an <see cref="IntentionRunner"/> (<see cref="IntentionBehaviour"/>, <see cref="TouchJoystickBehaviour"/>).</summary>
+    internal interface IIntentionRunnerMember
+    {
+        void Attach(IntentionSystem system, EventSystem eventSystem);
+
+        void Detach();
     }
 }

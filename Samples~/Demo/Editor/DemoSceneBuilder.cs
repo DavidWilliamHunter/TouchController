@@ -48,12 +48,23 @@ namespace Threads.TouchController.Demo
             Save(scene, FrameScenePath, "Intentions Frame Demo");
         }
 
+        public static string JoystickScenePath => ScenesFolder + "/JoystickDemo.unity";
+
+        [MenuItem("Threads/TouchController/Create Joystick Demo Scene")]
+        public static void BuildJoystick()
+        {
+            var scene = NewSceneWithCamera();
+            new GameObject("Joystick Demo").AddComponent<JoystickDemo>();
+            Save(scene, JoystickScenePath, "Joystick Demo");
+        }
+
         /// <summary>Every demo scene (used from the command line: -executeMethod Threads.TouchController.Demo.DemoSceneBuilder.BuildAll).</summary>
         public static void BuildAll()
         {
             BuildSurface();
             BuildAndroid();
             BuildFrame();
+            BuildJoystick();
         }
 
         public static void Build(string path, string name, DemoPlatform platform)

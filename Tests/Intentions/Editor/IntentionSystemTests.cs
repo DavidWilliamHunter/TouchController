@@ -489,5 +489,78 @@ namespace Threads.TouchController.Tests.Intentions
             CollectionAssert.AreEqual(new[] { "Possible", "Started", "Ended(Completed)" }, Names(log.WithoutPerformed()));
             Assert.IsEmpty(_h.Violations());
         }
+
+        // ---- StartWhen ----------------------------------------------------------------------------
+
+        private static bool Vertical(IntentionEventData e)
+        {
+            var d = e.PositionDp - e.StartPositionDp;
+            return Mathf.Abs(d.y) >= Mathf.Abs(d.x);
+        }
+
+        [Test]
+        public void StartWhen_AxisLock_HorizontalDragPassesToTheLowerPriorityIntention()
+        {
+            // A vertically dragged frame (high priority, exclusive) over a horizontal slider.
+            var frame = _h.Enable(New("Frame").Bind<DragGesture>().WithPriority(10).Exclusive().StartWhen(Vertical));
+            var slider = _h.Enable(New("Slider").Bind<DragGesture>().Exclusive());
+            var frameLog = _h.Log(frame);
+            var sliderLog = _h.Log(slider);
+
+            DragFinger(1, new Vector2(100, 100), new Vector2(300, 110));
+
+            CollectionAssert.AreEqual(new[] { "Possible", "Rejected(StartConditionFailed)" }, Names(frameLog.Entries));
+            CollectionAssert.AreEqual(new[] { "Possible", "Started", "Ended(Completed)" }, Names(sliderLog.WithoutPerformed()));
+            Assert.IsEmpty(_h.Violations());
+        }
+
+        [Test]
+        public void StartWhen_AxisLock_VerticalDragStartsAndPreemptsTheLowerPriorityIntention()
+        {
+            var frame = _h.Enable(New("Frame").Bind<DragGesture>().WithPriority(10).Exclusive().StartWhen(Vertical));
+            var slider = _h.Enable(New("Slider").Bind<DragGesture>().Exclusive());
+            var frameLog = _h.Log(frame);
+            var sliderLog = _h.Log(slider);
+
+            DragFinger(1, new Vector2(100, 100), new Vector2(110, 300));
+
+            CollectionAssert.AreEqual(new[] { "Possible", "Started", "Ended(Completed)" }, Names(frameLog.WithoutPerformed()));
+            CollectionAssert.AreEqual(new[] { "Possible", "Rejected(LostToPriority)" }, Names(sliderLog.Entries));
+            Assert.IsEmpty(_h.Violations());
+        }
+
+        [Test]
+        public void StartWhen_SeesTheMovementSoFar_AndIsAskedOncePerInstance()
+        {
+            var calls = new List<Vector2>();
+            var drag = _h.Enable(New("Drag").Bind<DragGesture>().StartWhen(e =>
+            {
+                calls.Add(e.PositionDp - e.StartPositionDp);
+                return true;
+            }));
+
+            DragFinger(1, new Vector2(100, 100), new Vector2(300, 100));
+
+            Assert.AreEqual(1, calls.Count);
+            Assert.Greater(calls[0].x, 0f, "the condition sees the movement that made the drag enter");
+            Assert.AreEqual(0, drag.Instances.Count);
+        }
+
+        [Test]
+        public void StartWhen_ThrowingConditionRejects_AndNullRemovesIt()
+        {
+            var drag = _h.Enable(New("Drag").Bind<DragGesture>().StartWhen(_ => throw new InvalidOperationException("test")));
+            var log = _h.Log(drag);
+
+            UnityEngine.TestTools.LogAssert.Expect(LogType.Exception, new Regex("test"));
+            DragFinger(1, new Vector2(100, 100), new Vector2(300, 100));
+            CollectionAssert.AreEqual(new[] { "Possible", "Rejected(StartConditionFailed)" }, Names(log.Entries));
+
+            log.Clear();
+            drag.StartWhen(null);
+            DragFinger(2, new Vector2(100, 100), new Vector2(300, 100));
+            CollectionAssert.AreEqual(new[] { "Possible", "Started", "Ended(Completed)" }, Names(log.WithoutPerformed()));
+            Assert.IsEmpty(_h.Violations());
+        }
     }
 }

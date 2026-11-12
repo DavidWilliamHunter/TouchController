@@ -150,6 +150,68 @@ namespace Threads.TouchController.Tests.Intentions
             Assert.IsFalse(ScriptedUi(eventSystem, null, null, null, frame).Accepts(AtPx(Vector2.zero), out _));
         }
 
+        // ---- UiRaycastArea.DragOwners ----------------------------------------------------------------
+
+        private static IIntentionArea ScriptedOwners(EventSystem eventSystem, Transform root, params GameObject[] hits) =>
+            UiRaycastArea.DragOwners(eventSystem, root, (data, results) =>
+            {
+                foreach (var hit in hits)
+                    results.Add(new RaycastResult { gameObject = hit });
+            });
+
+        private GameObject Child(string name, GameObject parent, params System.Type[] components)
+        {
+            var go = Make(name, components);
+            go.transform.SetParent(parent.transform, false);
+            return go;
+        }
+
+        [Test]
+        public void DragOwners_SliderAndScrollRectInsideTheRoot_AreOwners()
+        {
+            var (eventSystem, frame, button, label, _) = UiTree();
+            var slider = Child("Slider", frame, typeof(RectTransform), typeof(Slider));
+            var handle = Child("Handle", slider, typeof(RectTransform));
+            var scroll = Child("Scroll", frame, typeof(RectTransform), typeof(ScrollRect));
+            var inScroll = Child("Button in scroll", scroll, typeof(RectTransform), typeof(Button));
+
+            Assert.IsTrue(ScriptedOwners(eventSystem, frame.transform, handle).Accepts(AtPx(Vector2.zero), out var target));
+            Assert.AreSame(slider.GetComponent<Slider>(), target, "a hit on the slider's handle belongs to the slider");
+            Assert.IsTrue(ScriptedOwners(eventSystem, frame.transform, inScroll).Accepts(AtPx(Vector2.zero), out target));
+            Assert.AreSame(scroll.GetComponent<ScrollRect>(), target, "uGUI sends a drag on a button in a scroll view to the scroll view");
+
+            Assert.IsFalse(ScriptedOwners(eventSystem, frame.transform, label).Accepts(AtPx(Vector2.zero), out _), "a button doesn't handle drags");
+            Assert.IsFalse(ScriptedOwners(eventSystem, frame.transform, frame).Accepts(AtPx(Vector2.zero), out _));
+            Assert.IsFalse(ScriptedOwners(eventSystem, frame.transform).Accepts(AtPx(Vector2.zero), out _), "nothing hit");
+        }
+
+        [Test]
+        public void DragOwners_NonInteractableOrOutsideTheRoot_AreNotOwners()
+        {
+            var (eventSystem, frame, _, _, _) = UiTree();
+            var slider = Child("Slider", frame, typeof(RectTransform), typeof(Slider));
+            slider.GetComponent<Slider>().interactable = false;
+            Assert.IsFalse(ScriptedOwners(eventSystem, frame.transform, slider).Accepts(AtPx(Vector2.zero), out _), "a disabled slider ignores drags");
+
+            // The frame sits inside a scroll view: that scroll view is not an owner *inside* the frame.
+            var scroll = Make("Scroll", typeof(RectTransform), typeof(ScrollRect));
+            frame.transform.SetParent(scroll.transform, false);
+            var label = Child("Label", frame, typeof(RectTransform));
+            Assert.IsFalse(ScriptedOwners(eventSystem, frame.transform, label).Accepts(AtPx(Vector2.zero), out _));
+            Assert.IsTrue(ScriptedOwners(eventSystem, null, label).Accepts(AtPx(Vector2.zero), out _), "no root: any owner counts");
+        }
+
+        [Test]
+        public void DragOwners_ExcludedFromAFrameArea()
+        {
+            var (eventSystem, frame, button, _, _) = UiTree();
+            var slider = Child("Slider", frame, typeof(RectTransform), typeof(Slider));
+            var frameArea = new FuncArea(_ => true, _ => frame);
+
+            Assert.IsTrue(Area.All(frameArea, Area.Not(ScriptedOwners(eventSystem, frame.transform, button))).Accepts(AtPx(Vector2.zero), out _));
+            Assert.IsFalse(Area.All(frameArea, Area.Not(ScriptedOwners(eventSystem, frame.transform, slider))).Accepts(AtPx(Vector2.zero), out _));
+        }
+
         [Test]
         public void UiRaycast_ArgumentChecks()
         {

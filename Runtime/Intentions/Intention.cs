@@ -243,6 +243,24 @@ namespace Threads.TouchController.Intentions
         /// <summary><see cref="RequireActive{T}"/> for the running copy of a gesture asset.</summary>
         public Intention RequireActive(GestureBase gestureAsset) => AddRef(_requireActive, GestureRef.Of(gestureAsset));
 
+        /// <summary>
+        /// Start only if <paramref name="condition"/> returns true when the bound gesture enters. It is asked
+        /// once, before any other requirement and before the claim, with the instance as it is at that moment
+        /// (<see cref="IntentionEventData.PositionDp"/> − <see cref="IntentionEventData.StartPositionDp"/> is the
+        /// movement so far). If it returns false (or throws), the instance is
+        /// <see cref="IntentionReason.StartConditionFailed"/> and never claims the finger, so another intention
+        /// can take it. Null removes the condition.
+        /// </summary>
+        /// <example>Axis-lock: a frame that only moves vertically lets horizontal drags through to a slider.
+        /// <code>frameDrag.StartWhen(e =&gt; { var d = e.PositionDp - e.StartPositionDp; return Mathf.Abs(d.y) &gt;= Mathf.Abs(d.x); });</code></example>
+        public Intention StartWhen(Func<IntentionEventData, bool> condition)
+        {
+            StartCondition = condition;
+            return this;
+        }
+
+        internal Func<IntentionEventData, bool> StartCondition { get; private set; }
+
         public Intention InArea(IIntentionArea area, AreaCheck check = AreaCheck.AtStart)
         {
             _area = area;

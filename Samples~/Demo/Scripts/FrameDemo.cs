@@ -23,6 +23,10 @@ namespace Threads.TouchController.Demo
     /// <item><b>Intentions own the buttons</b>: the input module is off, and a <see cref="UiPointerIntention"/>
     /// presses them. The frame drag takes the finger from it (priority), which cancels the press.</item>
     /// </list>
+    /// <para>The frame also holds controls that handle drags themselves (a slider, a scroll view and an input
+    /// field). Their area is left out of the frame drag (<see cref="UiRaycastArea.DragOwners"/>), so a drag that
+    /// starts on them moves the control, not the frame. They need uGUI's input module: in the intentions mode
+    /// only taps work (<see cref="UiPointerIntention"/> sends no drag events).</para>
     /// <para>The canvas is scaled so one UI unit is one dp, so intention deltas move the frame directly.</para>
     /// </remarks>
     public sealed class FrameDemo : MonoBehaviour
@@ -91,9 +95,10 @@ namespace Threads.TouchController.Demo
             BuildUi();
             _intentions.Startup();
 
+            // The frame, minus the controls inside it that handle drags themselves (slider, scroll view, input field).
             _frameDrag = new Intention("Frame drag", _intentions)
                 .Bind<DragGesture>()
-                .InArea(new RectTransformArea(_frame))
+                .InArea(Area.All(new RectTransformArea(_frame), Area.Not(UiRaycastArea.DragOwners(_eventSystem, _frame))))
                 .WithPriority(10)
                 .Exclusive();
             _frameDrag.Started += OnFrameDragStarted;
@@ -105,7 +110,7 @@ namespace Threads.TouchController.Demo
             _uiPointer = new UiPointerIntention(_intentions, _eventSystem, _canvas.transform);
 
             ApplyMode();
-            Log("Drag the frame from anywhere, even from a button. Tap a button to press it.");
+            Log("Drag the frame from anywhere, even from a button. Tap a button to press it. The slider, list and text field keep their own drags.");
         }
 
         private void Update()
@@ -179,6 +184,8 @@ namespace Threads.TouchController.Demo
             Log(intentionsPress
                 ? "Intentions press the buttons (UiPointerIntention); uGUI's input module is off."
                 : "uGUI presses the buttons; the drag relay cancels a click when the frame drag starts.");
+            if (intentionsPress)
+                Log("Only taps work now: the slider, list and text field need uGUI's input module.");
         }
 
         private void Log(string line)
@@ -216,14 +223,19 @@ namespace Threads.TouchController.Demo
             ApplyScale();
 
             // The frame, with a drag relay so uGUI cancels a button's click when a drag starts on it.
-            _frame = Panel(_canvasRect, "Frame", FrameColour, Vector2.zero, new Vector2(300, 220));
+            _frame = Panel(_canvasRect, "Frame", FrameColour, Vector2.zero, new Vector2(300, 470));
             _frameImage = _frame.GetComponent<Image>();
             _relay = _frame.gameObject.AddComponent<IntentionDragRelay>();
-            Label(_frame, "Drag me from anywhere", new Vector2(0, 80), new Vector2(280, 30), 16);
-            ButtonAt(_frame, "Red", new Vector2(-95, 0), () => OnButton("Red"));
-            ButtonAt(_frame, "Green", new Vector2(0, 0), () => OnButton("Green"));
-            ButtonAt(_frame, "Blue", new Vector2(95, 0), () => OnButton("Blue"));
-            Label(_frame, "Tap: press · Drag: move the frame", new Vector2(0, -75), new Vector2(280, 30), 13);
+            Label(_frame, "Drag me from anywhere", new Vector2(0, 210), new Vector2(280, 30), 16);
+            ButtonAt(_frame, "Red", new Vector2(-95, 160), () => OnButton("Red"));
+            ButtonAt(_frame, "Green", new Vector2(0, 160), () => OnButton("Green"));
+            ButtonAt(_frame, "Blue", new Vector2(95, 160), () => OnButton("Blue"));
+            Label(_frame, "Tap: press · Drag: move the frame", new Vector2(0, 118), new Vector2(280, 24), 13);
+
+            // Controls that handle drags themselves: the frame drag leaves them alone.
+            SliderAt(_frame, new Vector2(0, 80), value => Log($"Slider: {value:0.00}"));
+            ListAt(_frame, new Vector2(0, -50), 12);
+            InputFieldAt(_frame, new Vector2(0, -190), text => Log($"Text: {text}"));
 
             // The mode button, at the top, and the log, at the bottom.
             var mode = ButtonAt(_canvasRect, "", new Vector2(0, -50), ToggleMode, new Vector2(300, 44));
@@ -233,6 +245,96 @@ namespace Threads.TouchController.Demo
             _log = Label(_canvasRect, "", new Vector2(0, 90), new Vector2(360, 170), 13).GetComponent<Text>();
             _log.alignment = TextAnchor.LowerLeft;
             Anchor((RectTransform)_log.transform, new Vector2(0.5f, 0f));
+        }
+
+        private static RectTransform Stretch(Transform parent, string name, params System.Type[] components)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            foreach (var c in components) go.AddComponent(c);
+            go.transform.SetParent(parent, false);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = rect.offsetMax = Vector2.zero;
+            return rect;
+        }
+
+        private static void SliderAt(Transform parent, Vector2 position, UnityEngine.Events.UnityAction<float> onChanged)
+        {
+            var track = Panel(parent, "Slider", new Color(0.16f, 0.18f, 0.24f), position, new Vector2(260, 36));
+            var slider = track.gameObject.AddComponent<Slider>();
+            var fillArea = Stretch(track, "Fill Area");
+            fillArea.offsetMin = new Vector2(8, 12);
+            fillArea.offsetMax = new Vector2(-8, -12);
+            var fill = Stretch(fillArea, "Fill", typeof(Image));
+            fill.GetComponent<Image>().color = new Color(0.36f, 0.55f, 0.85f);
+            var handleArea = Stretch(track, "Handle Slide Area");
+            handleArea.offsetMin = new Vector2(18, 0);
+            handleArea.offsetMax = new Vector2(-18, 0);
+            var handle = Panel(handleArea, "Handle", new Color(0.85f, 0.88f, 0.95f), Vector2.zero, Vector2.zero);
+            handle.anchorMin = new Vector2(0, 0);
+            handle.anchorMax = new Vector2(0, 1);
+            handle.sizeDelta = new Vector2(36, 0);
+            slider.fillRect = fill;
+            slider.handleRect = handle;
+            slider.targetGraphic = handle.GetComponent<Image>();
+            slider.SetValueWithoutNotify(0.5f);
+            slider.onValueChanged.AddListener(onChanged);
+        }
+
+        private void ListAt(Transform parent, Vector2 position, int rows)
+        {
+            var view = Panel(parent, "List", new Color(0.16f, 0.18f, 0.24f), position, new Vector2(260, 170));
+            var scroll = view.gameObject.AddComponent<ScrollRect>();
+            var viewport = Stretch(view, "Viewport", typeof(RectMask2D));
+            var content = new GameObject("Content", typeof(RectTransform)).GetComponent<RectTransform>();
+            content.SetParent(viewport, false);
+            content.anchorMin = new Vector2(0, 1);
+            content.anchorMax = new Vector2(1, 1);
+            content.pivot = new Vector2(0.5f, 1);
+            content.sizeDelta = new Vector2(0, rows * 44 + 4);
+            for (var i = 0; i < rows; i++)
+            {
+                var itemName = $"Item {i + 1}";
+                var item = ButtonAt(content, itemName, Vector2.zero, () => OnButton(itemName), new Vector2(0, 40));
+                item.anchorMin = new Vector2(0, 1);
+                item.anchorMax = new Vector2(1, 1);
+                item.pivot = new Vector2(0.5f, 1);
+                item.sizeDelta = new Vector2(-8, 40);
+                item.anchoredPosition = new Vector2(0, -4 - i * 44);
+            }
+            scroll.viewport = viewport;
+            scroll.content = content;
+            scroll.horizontal = false;
+            scroll.movementType = ScrollRect.MovementType.Elastic;
+        }
+
+        private void InputFieldAt(Transform parent, Vector2 position, UnityEngine.Events.UnityAction<string> onEndEdit)
+        {
+            var box = Panel(parent, "Input Field", new Color(0.92f, 0.93f, 0.96f), position, new Vector2(260, 44));
+            var field = box.gameObject.AddComponent<InputField>();
+            var text = FieldText(box, "Text", FontStyle.Normal, new Color(0.1f, 0.1f, 0.12f));
+            var placeholder = FieldText(box, "Placeholder", FontStyle.Italic, new Color(0.45f, 0.45f, 0.5f));
+            placeholder.text = "Tap to type";
+            field.textComponent = text;
+            field.placeholder = placeholder;
+            field.targetGraphic = box.GetComponent<Image>();
+            field.onEndEdit.AddListener(onEndEdit);
+        }
+
+        private Text FieldText(Transform parent, string name, FontStyle style, Color colour)
+        {
+            var rect = Stretch(parent, name, typeof(Text));
+            rect.offsetMin = new Vector2(10, 4);
+            rect.offsetMax = new Vector2(-10, -4);
+            var text = rect.GetComponent<Text>();
+            text.font = _font;
+            text.fontSize = 15;
+            text.fontStyle = style;
+            text.color = colour;
+            text.supportRichText = false;
+            text.alignment = TextAnchor.MiddleLeft;
+            return text;
         }
 
         private static void Anchor(RectTransform rect, Vector2 anchor)

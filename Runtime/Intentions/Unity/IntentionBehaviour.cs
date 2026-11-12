@@ -25,7 +25,7 @@ namespace Threads.TouchController.Intentions
     /// intention stays disabled.</para>
     /// </remarks>
     [AddComponentMenu("Threads/TouchController/Intention")]
-    public sealed class IntentionBehaviour : MonoBehaviour
+    public sealed class IntentionBehaviour : MonoBehaviour, IIntentionRunnerMember
     {
         /// <summary>Where the intention applies, relative to this GameObject.</summary>
         public enum AreaKind
@@ -64,6 +64,9 @@ namespace Threads.TouchController.Intentions
         [SerializeField] private ClaimMode claim = ClaimMode.Shared;
 
         [SerializeField] private AreaKind area = AreaKind.Everywhere;
+
+        [Tooltip("Not where a drag starts on a UI control that handles drags itself (Slider, Scrollbar, ScrollRect, input field) inside this object. Needs the runner's EventSystem. Use it for a dragged frame holding such controls.")]
+        [SerializeField] private bool excludeDragOwners;
 
         [SerializeField] private AreaCheck areaCheck = AreaCheck.AtStart;
 
@@ -127,6 +130,16 @@ namespace Threads.TouchController.Intentions
         {
             get => area;
             set => area = value;
+        }
+
+        /// <summary>
+        /// Leave out drags that start on UI controls handling drags themselves (<see cref="UiRaycastArea.DragOwners"/>)
+        /// inside this object. Takes effect at the next Attach.
+        /// </summary>
+        public bool ExcludeDragOwners
+        {
+            get => excludeDragOwners;
+            set => excludeDragOwners = value;
         }
 
         public AreaCheck AreaCheck
@@ -245,6 +258,19 @@ namespace Threads.TouchController.Intentions
         }
 
         private IIntentionArea MakeArea()
+        {
+            var made = MakeBaseArea();
+            if (!excludeDragOwners) return made;
+            if (_eventSystem == null)
+            {
+                Debug.LogError($"'{name}': Exclude Drag Owners needs an EventSystem (set one on the runner, or pass it to Attach).", this);
+                return made;
+            }
+            var owners = UiRaycastArea.DragOwners(_eventSystem, transform);
+            return made == null ? Threads.TouchController.Intentions.Area.Not(owners) : Threads.TouchController.Intentions.Area.All(made, Threads.TouchController.Intentions.Area.Not(owners));
+        }
+
+        private IIntentionArea MakeBaseArea()
         {
             switch (area)
             {

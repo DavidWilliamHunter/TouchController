@@ -2,6 +2,20 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-11-12
+
+A preview build for device testing: touch joysticks, and Unity UI controls inside dragged frames. It may still change before it is released as tested.
+
+### Added
+
+- **Touch joysticks.** `TouchJoystick` comes in two modes: fixed, or floating (it appears under the thumb; optionally `Follow`). It responds at touch-down, has a radial dead zone and a response curve, and follows one finger at a time. Read `Value`, `IsHeld`, `OriginDp` and `ThumbDp`, or subscribe to `Pressed`, `Changed` and `Released`.
+- **`TouchSticks`**, an Input System device (layout `TouchSticks`, `leftStick` / `rightStick` with usages `Primary2DMotion` / `Secondary2DMotion`), with `TouchSticksDevice` (adds and removes it) and `JoystickInputOutput` (writes a joystick to a stick). Actions bound to `<TouchSticks>/leftStick` read the joysticks, so input code needs no changes.
+- `TouchJoystickBehaviour`: a joystick set up in the inspector, with an optional base and knob, and UnityEvents. `IntentionRunner` gains **Create Touch Sticks**.
+- `Intention.StartWhen(condition)`: start only if the condition holds when the gesture enters. If it doesn't, the instance is rejected with the new reason `StartConditionFailed`, before claiming the finger. Use it for axis-lock.
+- `UiRaycastArea.DragOwners(eventSystem, root)`: where a drag starts on a UI control that handles drags itself (Slider, Scrollbar, ScrollRect, input fields). Use `Area.Not(...)` to leave those controls out of a frame drag. `IntentionBehaviour` gains **Exclude Drag Owners** (off by default).
+- Usage.md §7b (Unity UI's controls inside a dragged frame) and §7c (touch joysticks).
+- Demo Scenes sample: the frame demo now has a slider, a list and a text field. A new **Joystick Demo** scene drives a ship through Input System actions only.
+
 ## [0.3.0] - 2026-11-12
 
 The intention system, after device tests on a Surface and on Android. No code changes since 0.2.2.
