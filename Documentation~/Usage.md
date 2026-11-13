@@ -913,6 +913,69 @@ moveAction.AddBinding("<TouchSticks>/leftStick");
 
 The **Joystick Demo** scene (Demo Scenes sample) has a floating joystick that moves a ship and a fixed one that turns it. The ship reads only Input System actions (touch sticks, gamepad and WASD).
 
+## 7d. Gestures as Input System actions ✅
+
+Bind actions to gestures as you would to keys or buttons: `<TouchGestures>/swipeLeft`, `/tap`, `/pinch`… Code that reads actions needs no changes, and the same action can have keyboard, mouse or gamepad bindings beside the gesture.
+
+### Setting it up
+
+- **In the inspector:** on the **`IntentionRunner`**, tick **Create Touch Gestures**. The runner adds the device while it runs and feeds it.
+  - **Touch Gesture Kinds** chooses the gestures.
+  - **Touch Gestures Ignore UI** (on by default; needs the runner's EventSystem) keeps gestures that start on UI away from the device, so a tap on a button isn't also a `tap` action.
+  - **Tap Waits For Double Tap**: see below.
+- **In code:**
+
+```csharp
+var gestures = new TouchGesturesDevice();                       // adds the device; Dispose() removes it
+var feed = new GestureInputOutput(_intentions, gestures, new GestureInputOptions
+{
+    Area = Area.Not(new UiRaycastArea(eventSystem)),            // optional: not over UI
+}) { Enabled = true };
+
+// The game's own actions:
+next = new InputAction("Next", InputActionType.Button, "<Keyboard>/rightArrow");
+next.AddBinding("<TouchGestures>/swipeLeft");
+zoom = new InputAction("Zoom", InputActionType.Value, "<TouchGestures>/pinch");
+```
+
+`GestureInputOutput` needs running touch and intention systems: it reads the gesture lineup, and gestures missing from it are skipped (`feed.Mapped` lists the ones it feeds).
+
+### The controls
+
+| Control | Kind | What it reports |
+|---|---|---|
+| `tap`, `doubleTap`, `twoFingerTap` | Button, **pulse** | Down for exactly one Input System update when the gesture is recognised. |
+| `swipeLeft`, `swipeRight`, `swipeUp`, `swipeDown` | Button, **pulse** | A swipe (flick) in that direction. |
+| `swipe` | Vector2, one update | The swipe's direction (one axis, ±1). |
+| `longPress` | Button, **held** | From when the long press is recognised until the finger lifts. |
+| `edgeSwipeLeft`, `edgeSwipeRight`, `edgeSwipeBottom`, `edgeSwipeTop` | Button, **held** | While a swipe in from that edge lasts. |
+| `dragging`, `pinching`, `rotating`, `twoFingerPanning` | Button, **held** | While that gesture lasts. |
+| `drag`, `twoFingerPan` | Vector2, **delta** | Movement since the previous update, in **pixels**, like `<Pointer>/delta`. |
+| `pinch` | Axis, **delta** | Scale change since the previous update, as the factor minus one: +0.1 is 10 % bigger. Apply it with `scale *= 1 + value`. |
+| `rotate` | Axis, **delta** | Rotation since the previous update, in degrees (as `AngleDeltaDeg`). |
+| `position` | Vector2 | Where the latest gesture happened, in pixels (origin bottom-left, as `<Touchscreen>/position`). |
+
+- **Pulses** work with every way of reading an action: `WasPerformedThisFrame()`, `performed` callbacks and `IsPressed()`. Two pulses in consecutive updates are two presses.
+- **Deltas** fall back to zero in the update after the movement, like a mouse delta. Several fingers dragging at once add up.
+- What happens during a frame reaches actions at the **next** Input System update (one frame later, as with the touch joysticks).
+
+### How it fits with intentions
+
+The device is fed through the intention system: one **shared** intention per gesture, at priority 0 (`GestureInputOptions.Priority`).
+- The option's **area** limits where gestures count.
+- A finger that an **exclusive** intention of equal or higher priority holds doesn't reach the device: a touch joystick, or a frame being dragged. Moving the joystick isn't also a `drag` action.
+
+Gestures overlap as usual. A swipe is also a drag, and each tap of a double tap is a tap. With **`TapWaitsForDoubleTap`**, a tap waits until a double tap can no longer happen. The second tap of a double tap is then not a tap, but single taps arrive later, after the double-tap timeout.
+
+Several devices: give each a usage (`new TouchGesturesDevice("LeftHalf")`) and its own `GestureInputOutput` with an area. Then bind `<TouchGestures>{LeftHalf}/tap`. For anything more specific, write an intention and call the device's `Pulse`, `Press`/`Release` or `Add…` methods from it.
+
+The **Gesture Actions Demo** scene (Demo Scenes sample) drives a card only through actions:
+- swipe to change the page;
+- tap, double tap and long press;
+- drag, pinch and twist to move, zoom and turn it.
+
+Keyboard and mouse bindings sit beside the gesture bindings.
+
 ---
 
 ## 8. Testing gestures and context code ✅

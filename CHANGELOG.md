@@ -2,6 +2,25 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the package uses [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] - 2026-11-13
+
+A preview build for device testing: gestures as Input System actions. It may still change before it is released as tested.
+
+### Added
+
+- **`TouchGestures`**, an Input System device (layout `TouchGestures`) for binding actions to gestures. The `Touch Gestures` device in the actions editor's binding picker has:
+  - pulse buttons: `tap`, `doubleTap`, `twoFingerTap`, `swipeLeft` / `Right` / `Up` / `Down`;
+  - held buttons: `longPress`, `edgeSwipeLeft` / `Right` / `Bottom` / `Top`, `dragging`, `pinching`, `rotating`, `twoFingerPanning`;
+  - per-update deltas: `drag`, `twoFingerPan` (pixels), `pinch` (scale factor − 1), `rotate` (degrees);
+  - `position` and `swipe`.
+- `TouchGesturesDevice`: adds and removes the device. It collects a frame's gestures and sends them at the next Input System update, so each pulse is down for exactly one update. It takes an optional usage, to tell several devices apart.
+- `GestureInputOutput`: feeds the device from the running gesture lineup through shared intentions. An area and exclusive intentions (joysticks, dragged frames) apply. `GestureInputOptions` sets the gestures, the area, the priority and `TapWaitsForDoubleTap`.
+- `IntentionRunner` gains:
+  - **Create Touch Gestures**, with **Touch Gesture Kinds**, **Touch Gestures Ignore UI** and **Tap Waits For Double Tap**;
+  - the `TouchGestures` and `GestureInput` properties.
+- Usage.md §7d.
+- Demo Scenes sample: a **Gesture Actions Demo** scene that drives a card through Input System actions only.
+
 ## [0.4.0] - 2026-11-12
 
 Touch joysticks, and Unity UI controls inside dragged frames: the 0.3.1 preview, released after testing. No code changes since 0.3.1.

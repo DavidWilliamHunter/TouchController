@@ -36,6 +36,18 @@ namespace Threads.TouchController.Intentions
         [Tooltip("Add a TouchSticks Input System device while running, for TouchJoystickBehaviours to write to (bind actions to <TouchSticks>/leftStick).")]
         [SerializeField] private bool createTouchSticks;
 
+        [Tooltip("Add a TouchGestures Input System device while running, fed with the gestures below, so actions can be bound to gestures (<TouchGestures>/swipeLeft, /tap, /pinch...).")]
+        [SerializeField] private bool createTouchGestures;
+
+        [Tooltip("The gestures fed to the TouchGestures device.")]
+        [SerializeField] private TouchGestureKinds touchGestureKinds = TouchGestureKinds.All;
+
+        [Tooltip("Gestures that start on UI (a raycast hit of the EventSystem) don't reach the TouchGestures device. Needs the EventSystem.")]
+        [SerializeField] private bool touchGesturesIgnoreUi = true;
+
+        [Tooltip("A tap waits until a double tap is no longer possible (the second tap of a double tap is then not a tap).")]
+        [SerializeField] private bool tapWaitsForDoubleTap;
+
         private readonly List<IIntentionRunnerMember> _members = new List<IIntentionRunnerMember>();
 
         /// <summary>Settings asset (null: the platform's default). Takes effect the next time the runner is enabled.</summary>
@@ -84,6 +96,40 @@ namespace Threads.TouchController.Intentions
         /// <summary>The Input System device for touch joysticks, while running with <see cref="CreateTouchSticks"/>; otherwise null.</summary>
         public TouchSticksDevice TouchSticks { get; private set; }
 
+        /// <summary>Add a <see cref="TouchGesturesDevice"/> fed by a <see cref="GestureInputOutput"/> while running. Takes effect when next enabled.</summary>
+        public bool CreateTouchGestures
+        {
+            get => createTouchGestures;
+            set => createTouchGestures = value;
+        }
+
+        /// <summary>The gestures fed to the <see cref="TouchGestures"/> device. Takes effect when next enabled.</summary>
+        public TouchGestureKinds TouchGestureKinds
+        {
+            get => touchGestureKinds;
+            set => touchGestureKinds = value;
+        }
+
+        /// <summary>Gestures that start on UI don't reach the <see cref="TouchGestures"/> device (needs <see cref="EventSystem"/>). Takes effect when next enabled.</summary>
+        public bool TouchGesturesIgnoreUi
+        {
+            get => touchGesturesIgnoreUi;
+            set => touchGesturesIgnoreUi = value;
+        }
+
+        /// <summary>See <see cref="GestureInputOptions.TapWaitsForDoubleTap"/>. Takes effect when next enabled.</summary>
+        public bool TapWaitsForDoubleTap
+        {
+            get => tapWaitsForDoubleTap;
+            set => tapWaitsForDoubleTap = value;
+        }
+
+        /// <summary>The Input System device for gestures, while running with <see cref="CreateTouchGestures"/>; otherwise null.</summary>
+        public TouchGesturesDevice TouchGestures { get; private set; }
+
+        /// <summary>What feeds <see cref="TouchGestures"/>, while running with <see cref="CreateTouchGestures"/>; otherwise null.</summary>
+        public GestureInputOutput GestureInput { get; private set; }
+
         public bool IsRunning => Intentions != null && Intentions.IsRunning;
 
         private void OnEnable()
@@ -99,6 +145,17 @@ namespace Threads.TouchController.Intentions
             Intentions.Startup();
             if (createTouchSticks)
                 TouchSticks = new TouchSticksDevice();
+            if (createTouchGestures)
+            {
+                TouchGestures = new TouchGesturesDevice();
+                GestureInput = new GestureInputOutput(Intentions, TouchGestures, new GestureInputOptions
+                {
+                    Name = name + " gestures",
+                    Gestures = touchGestureKinds,
+                    Area = touchGesturesIgnoreUi && eventSystem != null ? Area.Not(new UiRaycastArea(eventSystem)) : null,
+                    TapWaitsForDoubleTap = tapWaitsForDoubleTap,
+                }) { Enabled = true };
+            }
             if (eventSystem != null)
                 EventSystemSync.Apply(eventSystem, Touch);
             foreach (var member in _members.ToArray())
@@ -124,10 +181,14 @@ namespace Threads.TouchController.Intentions
         {
             foreach (var member in _members.ToArray())
                 member.Detach();
+            GestureInput?.Dispose();
+            GestureInput = null;
             Intentions?.Shutdown();
             Touch?.Shutdown();
             TouchSticks?.Dispose();
             TouchSticks = null;
+            TouchGestures?.Dispose();
+            TouchGestures = null;
             Intentions = null;
             Touch = null;
         }

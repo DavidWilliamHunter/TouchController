@@ -58,6 +58,16 @@ namespace Threads.TouchController.Demo
             Save(scene, JoystickScenePath, "Joystick Demo");
         }
 
+        public static string GestureActionsScenePath => ScenesFolder + "/GestureActionsDemo.unity";
+
+        [MenuItem("Threads/TouchController/Create Gesture Actions Demo Scene")]
+        public static void BuildGestureActions()
+        {
+            var scene = NewSceneWithCamera();
+            new GameObject("Gesture Actions Demo").AddComponent<GestureActionsDemo>();
+            Save(scene, GestureActionsScenePath, "Gesture Actions Demo");
+        }
+
         /// <summary>Every demo scene (used from the command line: -executeMethod Threads.TouchController.Demo.DemoSceneBuilder.BuildAll).</summary>
         public static void BuildAll()
         {
@@ -65,6 +75,7 @@ namespace Threads.TouchController.Demo
             BuildAndroid();
             BuildFrame();
             BuildJoystick();
+            BuildGestureActions();
         }
 
         public static void Build(string path, string name, DemoPlatform platform)
